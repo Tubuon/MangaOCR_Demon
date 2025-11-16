@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/cardAlbum"
+    android:layout_width="match_parent"
+    android:layout_height="180dp"
+    android:layout_margin="8dp"
+    app:cardElevation="4dp"
+    app:cardCornerRadius="12dp"
+    android:foreground="?attr/selectableItemBackground">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:gravity="center">
+
+        <TextView
+            android:id="@+id/tvAlbumName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Album Name"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@android:color/white"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:textAlignment="center"/>
+
+        <TextView
+            android:id="@+id/tvAlbumDescription"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Description"
+            android:textSize="14sp"
+            android:textColor="@android:color/white"
+            android:alpha="0.8"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:textAlignment="center"
+            android:layout_marginTop="8dp"/>
+
+        <TextView
+            android:id="@+id/tvChapterCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0 chapters"
+            android:textSize="12sp"
+            android:textColor="@android:color/white"
+            android:alpha="0.7"
+            android:layout_marginTop="8dp"/>
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>
