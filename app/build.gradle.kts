@@ -3,8 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("kotlin-kapt")
-
-    // ✅ THÊM FIREBASE PLUGIN - QUAN TRỌNG!
+    kotlin("plugin.serialization") version "1.9.20"
     id("com.google.gms.google-services")
 }
 
@@ -30,6 +29,15 @@ android {
                 "proguard-rules.pro"
             )
         }
+        debug {
+            buildConfigField("String", "OPENAI_API_KEY", "\"AIzaSyAWrKoJ7mJ6rQY_AiFWHOjMNn9Cour7TAM\"")
+        }
+        release {
+            buildConfigField("String", "OPENAI_API_KEY", "\"AIzaSyAWrKoJ7mJ6rQY_AiFWHOjMNn9Cour7TAM\"")
+        }
+    }
+    buildFeatures {
+        buildConfig = true
     }
 
     compileOptions {
@@ -84,7 +92,6 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-
     // PDF Viewer
     implementation("com.github.iamyashchouhan:AndroidPdfViewer:1.0.3")
 
@@ -96,6 +103,7 @@ dependencies {
     implementation("com.google.mlkit:translate:17.0.3")
     implementation("com.google.mlkit:language-id:17.0.6")
     implementation("com.google.mlkit:text-recognition-japanese:16.0.1")
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.0")
 
     // Lifecycle
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.9.4")
@@ -137,9 +145,15 @@ dependencies {
     implementation("com.google.http-client:google-http-client-gson:1.43.3") {
         exclude(group = "org.apache.httpcomponents", module = "httpclient")
     }
-
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
     // Gson
     implementation("com.google.code.gson:gson:2.10.1")
+
+    // ⭐ OkHttp for API calls
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+
+
 }
 
 // ✅ QUAN TRỌNG: Apply Google Services plugin ở cuối file

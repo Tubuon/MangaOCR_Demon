@@ -28,4 +28,48 @@ interface PageDao {
 
     @Query("SELECT * FROM page WHERE chapter_id = :chapterId ORDER BY page_index ASC")
     fun getPagesByChapterId(chapterId: Long): Flow<List<PageEntity>>
+
+
+    @Query("""
+        UPDATE page 
+        SET ocr_data_json = :ocrDataJson,
+            is_ocr_processed = :isProcessed,
+            ocr_language = :language,
+            last_ocr_date = :timestamp
+        WHERE id = :pageId
+    """)
+    suspend fun updateOcrData(
+        pageId: Long,
+        ocrDataJson: String,
+        isProcessed: Boolean,
+        language: String,
+        timestamp: Long
+    )
+
+    // ⭐ Get page by ID (synchronous for OCR processing)
+    @Query("SELECT * FROM page WHERE id = :pageId")
+    suspend fun getPageByIdSync(pageId: Long): PageEntity?
+
+    @Query("""
+        UPDATE page 
+        SET ocr_data_json = NULL,
+            is_ocr_processed = 0,
+            ocr_language = NULL,
+            last_ocr_date = NULL
+        WHERE id = :pageId
+    """)
+    suspend fun resetOcrData(pageId: Long)
+
+    @Query("""
+        UPDATE page 
+        SET ocr_data_json = NULL,
+            is_ocr_processed = 0,
+            ocr_language = NULL,
+            last_ocr_date = NULL
+        WHERE chapter_id = :chapterId
+    """)
+    suspend fun resetOcrDataForChapter(chapterId: Long)
+
+    @Query("SELECT * FROM page WHERE chapter_id = :chapterId ORDER BY page_index ASC")
+    suspend fun getPagesByChapterIdSync(chapterId: Long): List<PageEntity>
 }

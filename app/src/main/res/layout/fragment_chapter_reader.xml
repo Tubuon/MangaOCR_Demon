@@ -15,6 +15,7 @@
         android:gravity="center_vertical"
         android:paddingHorizontal="16dp"
         android:background="#80000000"
+        android:elevation="8dp"
         app:layout_constraintTop_toTopOf="parent">
 
         <ImageButton
@@ -47,7 +48,7 @@
 
     </LinearLayout>
 
-    <!-- ViewPager for pages -->
+    <!-- ViewPager for horizontal reading -->
     <androidx.viewpager2.widget.ViewPager2
         android:id="@+id/viewPagerPages"
         android:layout_width="match_parent"
@@ -63,5 +64,106 @@
         android:visibility="gone"
         app:layout_constraintTop_toBottomOf="@id/header"
         app:layout_constraintBottom_toBottomOf="parent" />
+
+    <!-- OCR Floating Action Button Menu -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabOcrMenu"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:src="@drawable/ic_image_placeholder"
+        app:tint="@android:color/white"
+        app:fabSize="normal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        android:contentDescription="OCR Menu"
+        android:elevation="6dp" />
+
+    <!-- Expandable OCR Action Buttons -->
+    <LinearLayout
+        android:id="@+id/layoutOcrActions"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:visibility="gone"
+        android:elevation="6dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/fabOcrMenu">
+
+        <!-- Scan current page -->
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/fabScanPage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:src="@drawable/ic_image_placeholder"
+            app:tint="@android:color/white"
+            app:fabSize="mini"
+            android:contentDescription="Scan current page" />
+
+        <!-- Toggle overlay visibility -->
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/fabToggleOverlay"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:src="@drawable/ic_image_placeholder"
+            app:tint="@android:color/white"
+            app:fabSize="mini"
+            android:contentDescription="Toggle text overlay" />
+
+        <!-- Debug mode toggle -->
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/fabDebugMode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@drawable/ic_image_placeholder"
+            app:tint="@android:color/white"
+            app:fabSize="mini"
+            android:contentDescription="Debug mode" />
+
+    </LinearLayout>
+
+    <!-- OCR Progress Card -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardOcrProgress"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:visibility="gone"
+        app:cardElevation="8dp"
+        app:cardCornerRadius="12dp"
+        app:cardBackgroundColor="@android:color/white"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="16dp"
+            android:gravity="center_vertical">
+
+            <ProgressBar
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_marginEnd="16dp"
+                style="?android:attr/progressBarStyleSmall" />
+
+            <TextView
+                android:id="@+id/tvOcrProgress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Processing OCR..."
+                android:textSize="15sp"
+                android:textColor="@android:color/black"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+    </com.google.android.material.card.MaterialCardView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

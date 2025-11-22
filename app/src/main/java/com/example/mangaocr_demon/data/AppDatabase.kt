@@ -14,7 +14,7 @@ import androidx.room.RoomDatabase
         AlbumEntity::class,        // ← THÊM
         AlbumChapterEntity::class
     ],
-    version = 3, // 🔺 tăng version để Room build lại DB
+    version = 4, // 🔺 tăng version để Room build lại DB
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -36,7 +36,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "manga_database"
                 )
-                    .fallbackToDestructiveMigration()
+                    .fallbackToDestructiveMigration() // ⚠️ Xóa data cũ, dùng migration nếu cần giữ
                     .build()
                 INSTANCE = instance
                 instance

@@ -1,3 +1,4 @@
+// File: ui/manga/PageAdapter.kt
 package com.example.mangaocr_demon.ui.manga
 
 import android.net.Uri
@@ -10,11 +11,15 @@ import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.example.mangaocr_demon.R
 import com.example.mangaocr_demon.data.PageEntity
+import com.example.mangaocr_demon.data.model.TextBlock
+import com.example.mangaocr_demon.data.model.OcrData
 import com.example.mangaocr_demon.databinding.ItemPageBinding
 import com.ymg.pdf.viewer.PDFView
+import kotlinx.serialization.json.Json
 
 class PageAdapter(
-    private val onPageLongClick: (PageEntity) -> Unit
+    private val onPageLongClick: (PageEntity) -> Unit,
+    private val onTextBlockClick: ((PageEntity, TextBlock) -> Unit)? = null
 ) : ListAdapter<PageEntity, PageAdapter.PageViewHolder>(DiffCallback) {
 
     companion object DiffCallback : DiffUtil.ItemCallback<PageEntity>() {
@@ -23,13 +28,33 @@ class PageAdapter(
         }
 
         override fun areContentsTheSame(oldItem: PageEntity, newItem: PageEntity): Boolean {
-            return oldItem == newItem
+            return oldItem.id == newItem.id &&
+                    oldItem.imageUri == newItem.imageUri &&
+                    oldItem.pageType == newItem.pageType &&
+                    oldItem.isOcrProcessed == newItem.isOcrProcessed &&
+                    oldItem.ocrDataJson == newItem.ocrDataJson &&
+                    oldItem.translatedText == newItem.translatedText
         }
+
+        override fun getChangePayload(oldItem: PageEntity, newItem: PageEntity): Any? {
+            if (oldItem.ocrDataJson != newItem.ocrDataJson) {
+                return "OCR_UPDATED"
+            }
+            return null
+        }
+    }
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        encodeDefaults = true
     }
 
     class PageViewHolder(
         private val binding: ItemPageBinding,
-        private val onPageLongClick: (PageEntity) -> Unit
+        private val onPageLongClick: (PageEntity) -> Unit,
+        private val onTextBlockClick: ((PageEntity, TextBlock) -> Unit)?,
+        private val json: Json
     ) : RecyclerView.ViewHolder(binding.root) {
         private var currentPage: PageEntity? = null
 
@@ -54,11 +79,11 @@ class PageAdapter(
             when (page.pageType) {
                 "PDF" -> bindPdfPage(page)
                 "IMAGE" -> bindImagePage(page)
-                else -> bindImagePage(page) // fallback to image
+                else -> bindImagePage(page)
             }
 
             // Show indicators
-            binding.ocrIndicator.visibility = if (!page.ocrText.isNullOrEmpty()) {
+            binding.ocrIndicator.visibility = if (page.isOcrProcessed) {
                 View.VISIBLE
             } else {
                 View.GONE
@@ -69,6 +94,24 @@ class PageAdapter(
             } else {
                 View.GONE
             }
+
+            // Load OCR overlay
+            loadOcrOverlay(page)
+        }
+
+        fun bind(page: PageEntity, payloads: List<Any>) {
+            currentPage = page
+
+            if (payloads.contains("OCR_UPDATED")) {
+                loadOcrOverlay(page)
+                binding.ocrIndicator.visibility = if (page.isOcrProcessed) {
+                    View.VISIBLE
+                } else {
+                    View.GONE
+                }
+            } else {
+                bind(page)
+            }
         }
 
         private fun bindImagePage(page: PageEntity) {
@@ -76,15 +119,12 @@ class PageAdapter(
 
             try {
                 val uri = page.imageUri?.let { Uri.parse(it) }
-
                 Glide.with(binding.root.context)
                     .load(uri)
                     .placeholder(R.drawable.ic_image_placeholder)
                     .error(R.drawable.ic_image_error)
                     .into(binding.imageView)
-
             } catch (e: Exception) {
-                android.util.Log.e("PageAdapter", "Error loading image", e)
                 binding.imageView.setImageResource(R.drawable.ic_image_error)
             }
         }
@@ -103,9 +143,6 @@ class PageAdapter(
                 }
 
                 val uri = Uri.parse(pdfUri)
-                android.util.Log.d("PageAdapter", "Loading PDF page $pageNumber from $pdfUri")
-
-                // Use the correct API for this library
                 binding.pdfView.fromUri(uri)
                     .defaultPage(pageNumber)
                     .enableSwipe(true)
@@ -114,22 +151,38 @@ class PageAdapter(
                     .spacing(10)
                     .onLoad { numPages ->
                         binding.loadingIndicator.visibility = View.GONE
-                        android.util.Log.d("PageAdapter", "PDF loaded with $numPages pages")
-                    }
-                    .onPageChange { page, pageCount ->
-                        android.util.Log.d("PageAdapter", "Page changed to $page of $pageCount")
                     }
                     .onError { error ->
                         binding.loadingIndicator.visibility = View.GONE
                         showError("PDF Error: ${error.message}")
-                        android.util.Log.e("PageAdapter", "PDF load error", error)
                     }
                     .load()
-
             } catch (e: Exception) {
                 binding.loadingIndicator.visibility = View.GONE
                 showError("Exception: ${e.message}")
-                android.util.Log.e("PageAdapter", "Error binding PDF page", e)
+            }
+        }
+
+        private fun loadOcrOverlay(page: PageEntity) {
+            if (page.ocrDataJson.isNullOrEmpty()) {
+                binding.overlayView.setTextBlocks(emptyList(), 0, 0)
+                return
+            }
+
+            try {
+                val ocrData = json.decodeFromString<OcrData>(page.ocrDataJson)
+
+                binding.overlayView.setTextBlocks(
+                    ocrData.textBlocks,
+                    ocrData.imageWidth,
+                    ocrData.imageHeight
+                )
+
+                binding.overlayView.setOnTextBlockClickListener { textBlock ->
+                    currentPage?.let { onTextBlockClick?.invoke(it, textBlock) }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("PageAdapter", "Error loading overlay", e)
             }
         }
 
@@ -137,13 +190,13 @@ class PageAdapter(
             binding.pdfView.visibility = View.GONE
             binding.errorText.visibility = View.VISIBLE
             binding.errorText.text = message
-            android.util.Log.e("PageAdapter", "PDF Error: $message")
         }
+
         fun cleanup() {
             try {
                 binding.pdfView.recycle()
             } catch (e: Exception) {
-                android.util.Log.e("PageAdapter", "Error cleaning up PDF viewer", e)
+                // Ignore
             }
         }
     }
@@ -154,12 +207,21 @@ class PageAdapter(
             parent,
             false
         )
-        return PageViewHolder(binding, onPageLongClick)
+        return PageViewHolder(binding, onPageLongClick, onTextBlockClick, json)
     }
 
     override fun onBindViewHolder(holder: PageViewHolder, position: Int) {
         holder.bind(getItem(position))
     }
+
+    override fun onBindViewHolder(holder: PageViewHolder, position: Int, payloads: MutableList<Any>) {
+        if (payloads.isEmpty()) {
+            super.onBindViewHolder(holder, position, payloads)
+        } else {
+            holder.bind(getItem(position), payloads)
+        }
+    }
+
     override fun onViewRecycled(holder: PageViewHolder) {
         super.onViewRecycled(holder)
         holder.cleanup()
