@@ -12,6 +12,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
+import com.example.mangaocr_demon.BuildConfig
 
 class GeminiTranslator(private val context: Context) {
 
@@ -29,15 +30,12 @@ class GeminiTranslator(private val context: Context) {
     // ⚠️ IMPORTANT: Lưu API key trong res/values/strings.xml hoặc BuildConfig
     // Lấy API key tại: https://aistudio.google.com/app/apikey
     private val apiKey: String
-        get() = "AIzaSyAWrKoJ7mJ6rQY_AiFWHOjMNn9Cour7TAM" // TODO: Replace with actual key
+        get() = BuildConfig.OPENAI_API_KEY
 
     // Gemini model - có thể dùng: gemini-1.5-flash (nhanh, free tier cao),
     // gemini-1.5-pro (chính xác hơn), gemini-2.0-flash-exp (mới nhất)
     private val model = "gemini-2.0-flash"
 
-    /**
-     * Translate multiple text blocks at once for better context
-     */
     suspend fun translateBlocks(textBlocks: List<TextBlock>): Result<List<TextBlock>> {
         return withContext(Dispatchers.IO) {
             try {
@@ -77,6 +75,9 @@ Guidelines:
 - Preserve any sound effects (FX) in a natural way
 - Keep the translation concise to fit in speech bubbles
 - Use natural Vietnamese language, not literal translation
+- The translation MUST be a single-line string with NO line breaks.
+- Absolutely DO NOT insert any newline characters, including actual newlines or \n.
+
 
 Input (JSON array):
 [$textsJson]

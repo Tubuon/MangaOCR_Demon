@@ -318,12 +318,6 @@ class ChapterReaderFragment : Fragment() {
             toggleFabMenu()
         }
 
-        // Toggle overlay visibility
-//        binding.fabToggleOverlay.setOnClickListener {
-//            toggleOverlayForCurrentPage()
-//            toggleFabMenu()
-//        }
-
         binding.fabScanPage.setOnLongClickListener {
             clearOcrForCurrentPage()
             toggleFabMenu()

@@ -36,15 +36,25 @@ class MangaOverlayView @JvmOverloads constructor(
 
     private val backgroundPaint = Paint().apply {
         color = Color.WHITE
-        alpha = 220
+        alpha = 245
         style = Paint.Style.FILL
     }
+
+    private val shadowPaint = Paint().apply {
+        color = Color.BLACK
+        alpha = 200
+        style = Paint.Style.FILL
+        maskFilter = android.graphics.BlurMaskFilter(4f, android.graphics.BlurMaskFilter.Blur.NORMAL)
+    }
+
 
     private val textPaint = Paint().apply {
         color = Color.BLACK
         textSize = 40f
         isAntiAlias = true
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        // ⭐ Thêm shadow cho text
+        setShadowLayer(2f, 1f, 1f, Color.WHITE)
     }
 
     private val borderPaint = Paint().apply {
@@ -58,7 +68,20 @@ class MangaOverlayView @JvmOverloads constructor(
 
     init {
         setWillNotDraw(false)
+        setLayerType(LAYER_TYPE_SOFTWARE, null) // ⭐ Enable software rendering for better text
     }
+
+    private fun getCompatibleTypeface(): Typeface {
+        return try {
+            // Try to use Noto Sans (supports CJK)
+            Typeface.create("noto-sans-cjk", Typeface.NORMAL)
+                ?: Typeface.create("sans-serif", Typeface.NORMAL)
+        } catch (e: Exception) {
+            // Fallback to default sans-serif (usually supports basic CJK)
+            Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+        }
+    }
+
 
     fun setTextBlocks(blocks: List<TextBlock>, imgWidth: Int, imgHeight: Int) {
         this.textBlocks = blocks
@@ -87,8 +110,13 @@ class MangaOverlayView @JvmOverloads constructor(
         if (!showOverlay || textBlocks.isEmpty()) return
         if (imageWidth == 0 || imageHeight == 0) return
 
+        // ⭐ FIX: Calculate scale correctly
         val scaleX = width.toFloat() / imageWidth
         val scaleY = height.toFloat() / imageHeight
+
+        // ⭐ DEBUG: Log scale factors
+        android.util.Log.d("MangaOverlayView", "View: ${width}x${height}, Image: ${imageWidth}x${imageHeight}")
+        android.util.Log.d("MangaOverlayView", "Scale: X=$scaleX, Y=$scaleY")
 
         textBlocks.forEach { block ->
             drawTextBlock(canvas, block, scaleX, scaleY)
@@ -96,13 +124,42 @@ class MangaOverlayView @JvmOverloads constructor(
     }
 
     private fun drawTextBlock(canvas: Canvas, block: TextBlock, scaleX: Float, scaleY: Float) {
+        // Get original bounds in pixels
         val bounds = block.getBounds(imageWidth, imageHeight)
+
+        // ⭐ DEBUG: Log original bounds
+        android.util.Log.d("MangaOverlayView",
+            "Block '${block.originalText}': " +
+                    "normalized=(${block.left}, ${block.top}, ${block.right}, ${block.bottom})")
+        android.util.Log.d("MangaOverlayView",
+            "  pixel bounds=(${bounds.left}, ${bounds.top}, ${bounds.right}, ${bounds.bottom})")
+
+        // Scale to view coordinates
         val scaledBounds = RectF(
             bounds.left * scaleX,
             bounds.top * scaleY,
             bounds.right * scaleX,
             bounds.bottom * scaleY
         )
+
+        // ⭐ DEBUG: Log scaled bounds
+        android.util.Log.d("MangaOverlayView",
+            "  scaled=(${scaledBounds.left}, ${scaledBounds.top}, ${scaledBounds.right}, ${scaledBounds.bottom})")
+
+        // ⭐ Ensure bounds are within view
+        if (scaledBounds.left < 0 || scaledBounds.top < 0 ||
+            scaledBounds.right > width || scaledBounds.bottom > height) {
+            android.util.Log.w("MangaOverlayView", "⚠️ Bounds out of view!")
+        }
+
+        // Draw shadow border (optional)
+        val expandedBounds = RectF(
+            scaledBounds.left - 2f,
+            scaledBounds.top - 2f,
+            scaledBounds.right + 2f,
+            scaledBounds.bottom + 2f
+        )
+        canvas.drawRoundRect(expandedBounds, 10f, 10f, shadowPaint)
 
         // Draw background
         canvas.drawRoundRect(scaledBounds, 8f, 8f, backgroundPaint)
@@ -112,7 +169,7 @@ class MangaOverlayView @JvmOverloads constructor(
             canvas.drawRoundRect(scaledBounds, 8f, 8f, borderPaint)
         }
 
-        // ⭐ Choose text to display
+        // Draw text
         val displayText = if (showTranslation && block.translatedText.isNotEmpty()) {
             block.translatedText
         } else {
@@ -122,16 +179,45 @@ class MangaOverlayView @JvmOverloads constructor(
         drawFittedText(canvas, displayText, scaledBounds)
     }
 
+    private fun cleanTextForCanvas(text: String): String {
+        return text
+            // Remove zero-width characters
+            .replace("\u200B", "") // Zero-width space
+            .replace("\u200C", "") // Zero-width non-joiner
+            .replace("\u200D", "") // Zero-width joiner
+            .replace("\uFEFF", "") // Zero-width no-break space
+            .replace("\u00A0", " ") // Non-breaking space
+            // Remove control characters
+            .replace(Regex("[\\p{Cc}\\p{Cf}]"), "")
+            // Normalize whitespace
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+
+
+
+
     private fun drawFittedText(canvas: Canvas, text: String, bounds: RectF) {
+        if (text.isEmpty()) return
+
         val availableWidth = bounds.width() - 16f
         val availableHeight = bounds.height() - 16f
 
         if (availableWidth <= 0 || availableHeight <= 0) return
 
+        // ⭐ Test if text can be rendered
+        if (!canRenderText(text)) {
+            android.util.Log.w("MangaOverlayView", "⚠️ Cannot render text: '$text'")
+            // Draw placeholder
+            drawPlaceholder(canvas, bounds)
+            return
+        }
+
+        // Calculate font size
         var fontSize = 40f
         textPaint.textSize = fontSize
 
-        // Adjust font size to fit
         val maxIterations = 10
         var iteration = 0
 
@@ -154,24 +240,59 @@ class MangaOverlayView @JvmOverloads constructor(
 
         textPaint.textSize = fontSize
 
-        val x = bounds.left + 8f
-        val y = bounds.top + 8f - textPaint.fontMetrics.ascent
-
+        // Draw text
         if (textPaint.measureText(text) > availableWidth) {
             drawMultiLineText(canvas, text, bounds, availableWidth)
         } else {
+            val x = bounds.left + 8f
+            val y = bounds.top + 8f - textPaint.fontMetrics.ascent
+
+            // ⭐ Use drawText with proper baseline
             canvas.drawText(text, x, y, textPaint)
         }
     }
 
+    // ⭐ NEW: Check if text can be rendered
+    private fun canRenderText(text: String): Boolean {
+        val width = textPaint.measureText(text)
+        return width > 0 && !width.isNaN() && !width.isInfinite()
+    }
+
+    private fun drawPlaceholder(canvas: Canvas, bounds: RectF) {
+        val placeholderPaint = Paint().apply {
+            color = Color.GRAY
+            textSize = 20f
+            typeface = Typeface.MONOSPACE
+        }
+
+        val text = "[Text]"
+        val x = bounds.left + 8f
+        val y = bounds.centerY()
+
+        canvas.drawText(text, x, y, placeholderPaint)
+    }
+
+
+
+
+
+
     private fun drawMultiLineText(canvas: Canvas, text: String, bounds: RectF, maxWidth: Float) {
-        val words = text.split(" ")
+        // ⭐ Smart word breaking for CJK + Latin
+        val words = if (isCJKText(text)) {
+            // CJK: can break at any character
+            text.chunked(1)
+        } else {
+            // Latin: break at spaces
+            text.split(" ")
+        }
+
         var currentLine = ""
         var y = bounds.top + 8f - textPaint.fontMetrics.ascent
         val lineHeight = textPaint.fontMetrics.descent - textPaint.fontMetrics.ascent + 4f
 
         for (word in words) {
-            val testLine = if (currentLine.isEmpty()) word else "$currentLine $word"
+            val testLine = if (currentLine.isEmpty()) word else "$currentLine$word"
             val testWidth = textPaint.measureText(testLine)
 
             if (testWidth > maxWidth && currentLine.isNotEmpty()) {
@@ -181,13 +302,22 @@ class MangaOverlayView @JvmOverloads constructor(
                 if (y > bounds.bottom - 8f) break
             } else {
                 currentLine = testLine
+                if (!isCJKText(text)) currentLine += " " // Add space for Latin text
             }
         }
 
         if (currentLine.isNotEmpty() && y <= bounds.bottom - 8f) {
-            canvas.drawText(currentLine, bounds.left + 8f, y, textPaint)
+            canvas.drawText(currentLine.trim(), bounds.left + 8f, y, textPaint)
         }
     }
+
+    private fun isCJKText(text: String): Boolean {
+        val cjkPattern = Regex("[\\u4E00-\\u9FFF\\u3040-\\u309F\\u30A0-\\u30FF]")
+        return cjkPattern.containsMatchIn(text)
+    }
+
+
+
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (event.action == MotionEvent.ACTION_DOWN) {

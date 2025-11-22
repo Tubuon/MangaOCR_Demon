@@ -163,6 +163,8 @@ class PageAdapter(
             }
         }
 
+        // File: ui/manga/PageAdapter.kt
+
         private fun loadOcrOverlay(page: PageEntity) {
             if (page.ocrDataJson.isNullOrEmpty()) {
                 binding.overlayView.setTextBlocks(emptyList(), 0, 0)
@@ -172,11 +174,37 @@ class PageAdapter(
             try {
                 val ocrData = json.decodeFromString<OcrData>(page.ocrDataJson)
 
-                binding.overlayView.setTextBlocks(
-                    ocrData.textBlocks,
-                    ocrData.imageWidth,
-                    ocrData.imageHeight
-                )
+                // ⭐ Wait for ImageView to load, then sync overlay
+                binding.imageView.post {
+                    val imageViewWidth = binding.imageView.width
+                    val imageViewHeight = binding.imageView.height
+
+                    android.util.Log.d("PageAdapter", "ImageView size: ${imageViewWidth}x${imageViewHeight}")
+                    android.util.Log.d("PageAdapter", "OCR image size: ${ocrData.imageWidth}x${ocrData.imageHeight}")
+
+                    // ⭐ Calculate actual display dimensions considering fitCenter
+                    val imageAspect = ocrData.imageWidth.toFloat() / ocrData.imageHeight
+                    val viewAspect = imageViewWidth.toFloat() / imageViewHeight
+
+                    var displayWidth = imageViewWidth
+                    var displayHeight = imageViewHeight
+
+                    if (imageAspect > viewAspect) {
+                        // Image is wider - fit to width
+                        displayHeight = (imageViewWidth / imageAspect).toInt()
+                    } else {
+                        // Image is taller - fit to height
+                        displayWidth = (imageViewHeight * imageAspect).toInt()
+                    }
+
+                    android.util.Log.d("PageAdapter", "Calculated display size: ${displayWidth}x${displayHeight}")
+
+                    binding.overlayView.setTextBlocks(
+                        ocrData.textBlocks,
+                        displayWidth, // ⭐ Use calculated dimensions
+                        displayHeight
+                    )
+                }
 
                 binding.overlayView.setOnTextBlockClickListener { textBlock ->
                     currentPage?.let { onTextBlockClick?.invoke(it, textBlock) }

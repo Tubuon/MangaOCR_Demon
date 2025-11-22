@@ -1,3 +1,8 @@
+import java.util.Properties
+
+
+
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -19,6 +24,14 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val properties = Properties()
+        properties.load(project.rootProject.file("local.properties").inputStream())
+        buildConfigField("String", "OPENAI_API_KEY",
+            "\"${properties.getProperty("OPENAI_API_KEY", "")}\"")
+
+
+
     }
 
     buildTypes {
@@ -29,15 +42,10 @@ android {
                 "proguard-rules.pro"
             )
         }
-        debug {
-            buildConfigField("String", "OPENAI_API_KEY", "\"AIzaSyAWrKoJ7mJ6rQY_AiFWHOjMNn9Cour7TAM\"")
+        buildFeatures {
+            buildConfig = true
         }
-        release {
-            buildConfigField("String", "OPENAI_API_KEY", "\"AIzaSyAWrKoJ7mJ6rQY_AiFWHOjMNn9Cour7TAM\"")
-        }
-    }
-    buildFeatures {
-        buildConfig = true
+
     }
 
     compileOptions {
