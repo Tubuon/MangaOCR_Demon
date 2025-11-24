@@ -201,38 +201,44 @@ class MangaOverlayView @JvmOverloads constructor(
     private fun drawFittedText(canvas: Canvas, text: String, bounds: RectF) {
         if (text.isEmpty()) return
 
-        val availableWidth = bounds.width() - 16f
-        val availableHeight = bounds.height() - 16f
+        // ⭐ Reduce padding to give more space for text
+        val paddingX = 8f // Reduced from potential larger value
+        val paddingY = 6f
+
+        val availableWidth = bounds.width() - (paddingX * 2)
+        val availableHeight = bounds.height() - (paddingY * 2)
 
         if (availableWidth <= 0 || availableHeight <= 0) return
 
-        // ⭐ Test if text can be rendered
-        if (!canRenderText(text)) {
-            android.util.Log.w("MangaOverlayView", "⚠️ Cannot render text: '$text'")
-            // Draw placeholder
-            drawPlaceholder(canvas, bounds)
-            return
-        }
+        val cleanedText = cleanTextForCanvas(text)
 
-        // Calculate font size
-        var fontSize = 40f
+        // ⭐ Better font size calculation
+        var fontSize = calculateInitialFontSize(bounds, cleanedText.length)
         textPaint.textSize = fontSize
 
-        val maxIterations = 10
+        val maxIterations = 15 // Increased iterations
         var iteration = 0
 
         while (iteration < maxIterations) {
             textPaint.textSize = fontSize
-            val textWidth = textPaint.measureText(text)
-            val textHeight = textPaint.fontMetrics.let { it.descent - it.ascent }
 
-            if (textWidth <= availableWidth && textHeight <= availableHeight) {
+            // Measure text dimensions
+            val textWidth = textPaint.measureText(cleanedText)
+            val metrics = textPaint.fontMetrics
+            val textHeight = metrics.descent - metrics.ascent
+
+            // ⭐ Check if text fits (with multiline consideration)
+            val estimatedLines = Math.ceil(textWidth / availableWidth.toDouble()).toInt()
+            val totalHeight = estimatedLines * textHeight
+
+            if (textWidth <= availableWidth ||
+                (estimatedLines > 1 && totalHeight <= availableHeight)) {
                 break
             }
 
-            fontSize -= 2f
-            if (fontSize < 12f) {
-                fontSize = 12f
+            fontSize -= 1.5f // Smaller decrement for finer control
+            if (fontSize < 10f) {
+                fontSize = 10f
                 break
             }
             iteration++
@@ -241,49 +247,68 @@ class MangaOverlayView @JvmOverloads constructor(
         textPaint.textSize = fontSize
 
         // Draw text
-        if (textPaint.measureText(text) > availableWidth) {
-            drawMultiLineText(canvas, text, bounds, availableWidth)
+        if (textPaint.measureText(cleanedText) > availableWidth) {
+            drawMultiLineText(canvas, cleanedText, bounds, availableWidth)
         } else {
-            val x = bounds.left + 8f
-            val y = bounds.top + 8f - textPaint.fontMetrics.ascent
-
-            // ⭐ Use drawText with proper baseline
-            canvas.drawText(text, x, y, textPaint)
+            val x = bounds.left + paddingX
+            val y = bounds.top + paddingY - textPaint.fontMetrics.ascent
+            canvas.drawText(cleanedText, x, y, textPaint)
         }
     }
 
-    // ⭐ NEW: Check if text can be rendered
-    private fun canRenderText(text: String): Boolean {
-        val width = textPaint.measureText(text)
-        return width > 0 && !width.isNaN() && !width.isInfinite()
-    }
+    private fun calculateInitialFontSize(bounds: RectF, textLength: Int): Float {
+        val area = bounds.width() * bounds.height()
+        val charArea = area / textLength
 
-    private fun drawPlaceholder(canvas: Canvas, bounds: RectF) {
-        val placeholderPaint = Paint().apply {
-            color = Color.GRAY
-            textSize = 20f
-            typeface = Typeface.MONOSPACE
-        }
-
-        val text = "[Text]"
-        val x = bounds.left + 8f
-        val y = bounds.centerY()
-
-        canvas.drawText(text, x, y, placeholderPaint)
+        // Heuristic: larger area per character = larger font
+        return when {
+            charArea > 5000 -> 48f
+            charArea > 3000 -> 40f
+            charArea > 2000 -> 32f
+            charArea > 1000 -> 24f
+            charArea > 500 -> 18f
+            else -> 14f
+        }.coerceAtMost(60f) // Max font size
     }
 
 
 
 
 
+//    // ⭐ NEW: Check if text can be rendered
+//    private fun canRenderText(text: String): Boolean {
+//        val width = textPaint.measureText(text)
+//        return width > 0 && !width.isNaN() && !width.isInfinite()
+//    }
+//
+//    private fun drawPlaceholder(canvas: Canvas, bounds: RectF) {
+//        val placeholderPaint = Paint().apply {
+//            color = Color.GRAY
+//            textSize = 20f
+//            typeface = Typeface.MONOSPACE
+//        }
+//
+//        val text = "[Text]"
+//        val x = bounds.left + 8f
+//        val y = bounds.centerY()
+//
+//        canvas.drawText(text, x, y, placeholderPaint)
+//    }
 
     private fun drawMultiLineText(canvas: Canvas, text: String, bounds: RectF, maxWidth: Float) {
-        // ⭐ Smart word breaking for CJK + Latin
-        val words = if (isCJKText(text)) {
-            // CJK: can break at any character
-            text.chunked(1)
+        // ⭐ FIX: Detect if text is mixed CJK + Latin
+        val hasCJK = isCJKText(text)
+        val hasLatin = text.any { it.isLetter() && it.code < 128 }
+
+        // Split logic based on text type
+        val segments = if (hasCJK && hasLatin) {
+            // Mixed text: split more carefully
+            splitMixedText(text)
+        } else if (hasCJK) {
+            // Pure CJK: can break anywhere but prefer after punctuation
+            smartSplitCJK(text)
         } else {
-            // Latin: break at spaces
+            // Latin: split by spaces
             text.split(" ")
         }
 
@@ -291,29 +316,104 @@ class MangaOverlayView @JvmOverloads constructor(
         var y = bounds.top + 8f - textPaint.fontMetrics.ascent
         val lineHeight = textPaint.fontMetrics.descent - textPaint.fontMetrics.ascent + 4f
 
-        for (word in words) {
-            val testLine = if (currentLine.isEmpty()) word else "$currentLine$word"
+        for (segment in segments) {
+            val separator = if (hasCJK && !segment.matches(Regex("^[\\p{P}\\p{S}]+$"))) "" else " "
+            val testLine = if (currentLine.isEmpty()) {
+                segment
+            } else {
+                currentLine + separator + segment
+            }
+
             val testWidth = textPaint.measureText(testLine)
 
             if (testWidth > maxWidth && currentLine.isNotEmpty()) {
+                // Draw current line
                 canvas.drawText(currentLine, bounds.left + 8f, y, textPaint)
-                currentLine = word
+                currentLine = segment
                 y += lineHeight
                 if (y > bounds.bottom - 8f) break
             } else {
                 currentLine = testLine
-                if (!isCJKText(text)) currentLine += " " // Add space for Latin text
             }
         }
 
+        // Draw last line
         if (currentLine.isNotEmpty() && y <= bounds.bottom - 8f) {
-            canvas.drawText(currentLine.trim(), bounds.left + 8f, y, textPaint)
+            canvas.drawText(currentLine, bounds.left + 8f, y, textPaint)
         }
     }
 
+    private fun smartSplitCJK(text: String): List<String> {
+        val result = mutableListOf<String>()
+        var current = ""
+
+        text.forEach { char ->
+            current += char
+            // Break after punctuation or after 2-3 characters
+            if (isPunctuation(char) || current.length >= 3) {
+                result.add(current)
+                current = ""
+            }
+        }
+
+        if (current.isNotEmpty()) {
+            result.add(current)
+        }
+
+        return result
+    }
+
+
+    private fun splitMixedText(text: String): List<String> {
+        val result = mutableListOf<String>()
+        var current = ""
+        var lastWasCJK = false
+
+        text.forEach { char ->
+            val isCJK = char.code in 0x4E00..0x9FFF ||
+                    char.code in 0x3040..0x309F ||
+                    char.code in 0x30A0..0x30FF
+
+            if (char.isWhitespace()) {
+                if (current.isNotEmpty()) {
+                    result.add(current)
+                    current = ""
+                }
+            } else if (isCJK != lastWasCJK && current.isNotEmpty()) {
+                // Transition between CJK and Latin
+                result.add(current)
+                current = char.toString()
+            } else {
+                current += char
+
+                // Break CJK after 2-3 chars or punctuation
+                if (isCJK && (current.length >= 3 || isPunctuation(char))) {
+                    result.add(current)
+                    current = ""
+                }
+            }
+
+            lastWasCJK = isCJK
+        }
+
+        if (current.isNotEmpty()) {
+            result.add(current)
+        }
+
+        return result.filter { it.isNotEmpty() }
+    }
+
+    private fun isPunctuation(char: Char): Boolean {
+        return char in listOf('。', '，', '、', '；', '：', '？', '！', '.', ',', ';', ':', '?', '!')
+    }
+
     private fun isCJKText(text: String): Boolean {
-        val cjkPattern = Regex("[\\u4E00-\\u9FFF\\u3040-\\u309F\\u30A0-\\u30FF]")
-        return cjkPattern.containsMatchIn(text)
+        val cjkCount = text.count { char ->
+            char.code in 0x4E00..0x9FFF ||
+                    char.code in 0x3040..0x309F ||
+                    char.code in 0x30A0..0x30FF
+        }
+        return cjkCount > text.length / 2 // More than 50% CJK
     }
 
 

@@ -5,12 +5,14 @@
     android:orientation="vertical"
     android:padding="16dp">
 
+    <!-- Original Text Section -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Original Text"
         android:textStyle="bold"
         android:textSize="14sp"
+        android:textColor="?attr/colorPrimary"
         android:layout_marginBottom="8dp" />
 
     <TextView
@@ -20,14 +22,17 @@
         android:background="@drawable/bg_text_block"
         android:padding="12dp"
         android:textSize="16sp"
+        android:minHeight="48dp"
         android:layout_marginBottom="16dp" />
 
+    <!-- Translation Edit Section -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Edit Text"
+        android:text="Translation (Edit here)"
         android:textStyle="bold"
         android:textSize="14sp"
+        android:textColor="?attr/colorSecondary"
         android:layout_marginBottom="8dp" />
 
     <EditText
@@ -35,13 +40,15 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:minLines="3"
-        android:maxLines="6"
+        android:maxLines="8"
         android:gravity="top|start"
         android:background="@drawable/bg_edit_text"
         android:padding="12dp"
         android:layout_marginBottom="16dp"
-        android:hint="Edit recognized text" />
+        android:hint="Edit translation here"
+        android:inputType="textMultiLine" />
 
+    <!-- Metadata Section -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

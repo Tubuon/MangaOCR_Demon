@@ -5,7 +5,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.view.animation.AnimationUtils
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -29,22 +28,23 @@ class ChapterReaderFragment : Fragment() {
 
     private var _binding: FragmentChapterReaderBinding? = null
     private val binding get() = _binding!!
-
     private lateinit var ocrViewModel: OcrViewModel
-
     private var currentPages: List<PageEntity> = emptyList()
     private var isFabMenuExpanded = false
     private lateinit var pageAdapter: PageAdapter
     private lateinit var pageVerticalAdapter: PageVerticalAdapter
     private lateinit var viewModel: ChapterReaderViewModel
     private lateinit var settingsManager: SettingsManager
-
     private var chapterId: Long = -1L
+    private var mangaTitle: String? = null
+    private var chapterNumber: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         arguments?.let {
             chapterId = it.getLong("chapterId", -1L)
+            mangaTitle = it.getString("mangaTitle") // ⭐ NEW
+            chapterNumber = it.getString("chapterNumber") // ⭐ NEW
         }
     }
 
@@ -61,7 +61,6 @@ class ChapterReaderFragment : Fragment() {
 
         settingsManager = SettingsManager(requireContext())
 
-        // Apply settings
         applyTheme()
         applyReadingMode()
         applyScreenSettings()
@@ -70,42 +69,6 @@ class ChapterReaderFragment : Fragment() {
         setupBackButton()
         setupOcrControls()
     }
-
-    private fun debugShowOverlay() {
-        val currentPosition = binding.viewPagerPages.currentItem
-        if (currentPosition >= 0 && currentPosition < currentPages.size) {
-            val page = currentPages[currentPosition]
-
-            android.util.Log.d("ChapterReaderFragment", "🔍 Current page: ${page.id}")
-            android.util.Log.d("ChapterReaderFragment", "🔍 isOcrProcessed: ${page.isOcrProcessed}")
-            android.util.Log.d("ChapterReaderFragment", "🔍 ocrDataJson: ${page.ocrDataJson?.take(200)}")
-
-            lifecycleScope.launch {
-                // Force reload this specific page
-                val db = AppDatabase.getDatabase(requireContext())
-                val freshPage = db.pageDao().getPageByIdSync(page.id)
-
-                android.util.Log.d("ChapterReaderFragment", "🔄 Fresh page from DB:")
-                android.util.Log.d("ChapterReaderFragment", "  - isOcrProcessed: ${freshPage?.isOcrProcessed}")
-                android.util.Log.d("ChapterReaderFragment", "  - ocrDataJson length: ${freshPage?.ocrDataJson?.length}")
-
-                if (freshPage != null) {
-                    // Update the list
-                    val updatedList = currentPages.toMutableList()
-                    updatedList[currentPosition] = freshPage
-                    currentPages = updatedList
-
-                    // Force adapter update
-                    pageAdapter.submitList(null)
-                    pageAdapter.submitList(updatedList)
-                    pageAdapter.notifyItemChanged(currentPosition)
-
-                    android.util.Log.d("ChapterReaderFragment", "✅ Forced adapter update")
-                }
-            }
-        }
-    }
-
 
     private fun applyTheme() {
         val bgColor = settingsManager.getThemeBackgroundColor()
@@ -176,12 +139,7 @@ class ChapterReaderFragment : Fragment() {
     }
 
     private fun setupWebtoonMode() {
-        // Webtoon mode is similar to vertical but with continuous scrolling
         setupVerticalMode()
-        // You can add specific webtoon features here like:
-        // - Seamless scrolling between chapters
-        // - Auto-load next chapter
-        // - Different spacing between images
     }
 
     private fun applyScreenSettings() {
@@ -210,6 +168,7 @@ class ChapterReaderFragment : Fragment() {
 
         viewModel.chapter.observe(viewLifecycleOwner) { chapter ->
             binding.tvChapterTitle.text = "Chapter ${chapter?.number ?: ""}"
+            chapterNumber = chapter?.number?.toString()
         }
 
         viewModel.pages.observe(viewLifecycleOwner) { pages ->
@@ -349,7 +308,8 @@ class ChapterReaderFragment : Fragment() {
                 return
             }
 
-            ocrViewModel.translatePage(page)
+            // ⭐ Pass manga info to ViewModel
+            ocrViewModel.translatePage(page, mangaTitle, chapterNumber)
         } else {
             showError("No page selected")
         }
@@ -462,17 +422,6 @@ class ChapterReaderFragment : Fragment() {
             return
         }
 
-        // ⭐ REMOVED: Block that prevents re-scan
-        /*
-        if (page.isOcrProcessed) {
-            Snackbar.make(
-                binding.root,
-                "This page is already processed. Long press text to edit.",
-                Snackbar.LENGTH_SHORT
-            ).show()
-            return
-        }
-        */
 
         android.util.Log.d("ChapterReaderFragment", "🔄 Processing OCR for page ${page.id}")
         ocrViewModel.processPage(page)
@@ -568,10 +517,6 @@ class ChapterReaderFragment : Fragment() {
         }
     }
 
-
-
-
-
     private fun refreshCurrentPage() {
         // Trigger a refresh of the LiveData
         viewModel.pages.value?.let { pages ->
@@ -590,8 +535,15 @@ class ChapterReaderFragment : Fragment() {
 
     private fun showTextBlockDetails(page: PageEntity, textBlock: TextBlock) {
         val dialog = TextBlockDetailDialog.newInstance(page.id, textBlock)
+
+        dialog.onDismissListener = {
+            android.util.Log.d("ChapterReaderFragment", "Dialog dismissed, refreshing view")
+            forceReloadPages()
+        }
+
         dialog.show(childFragmentManager, "TextBlockDetailDialog")
     }
+
 
     private fun showError(message: String) {
         Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG)
@@ -616,6 +568,7 @@ class ChapterReaderFragment : Fragment() {
             return ChapterReaderFragment().apply {
                 arguments = Bundle().apply {
                     putLong("chapterId", chapterId)
+                    putString("mangaTitle", mangaTitle)
                 }
             }
         }

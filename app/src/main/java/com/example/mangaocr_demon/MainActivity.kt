@@ -5,6 +5,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.fragment.app.Fragment
 import com.example.mangaocr_demon.databinding.ActivityMainBinding
+import com.example.mangaocr_demon.ui.history.BookcaseFragment
 
 class MainActivity : AppCompatActivity() {
 

@@ -91,8 +91,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                             imageUri = imageUri?.toString(),
                             ocrText = text,
                             translatedText = translated,
-                            timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-                                .format(Date())
+                            timestamp = System.currentTimeMillis()
                         )
                         viewModelScope.launch(Dispatchers.IO) {
                             historyDao.insert(history)

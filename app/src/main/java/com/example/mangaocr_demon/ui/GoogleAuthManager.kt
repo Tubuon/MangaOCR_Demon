@@ -85,8 +85,6 @@ class GoogleAuthManager(private val context: Context) {
      * Lấy Intent để sign in
      */
     fun getSignInIntent(): Intent {
-        // Đăng xuất trước để luôn hiển thị account picker
-        signInClient.signOut()
         return signInClient.signInIntent
     }
 

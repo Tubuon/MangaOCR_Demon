@@ -2,21 +2,25 @@
 package com.example.mangaocr_demon.ui.reader
 
 import android.app.Dialog
+import android.content.DialogInterface
 import android.os.Bundle
 import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import android.widget.Button
-import android.widget.EditText
-import android.widget.TextView
 import androidx.fragment.app.DialogFragment
 import com.example.mangaocr_demon.R
+import com.example.mangaocr_demon.data.AppDatabase
+import com.example.mangaocr_demon.data.model.OcrData
 import com.example.mangaocr_demon.data.model.TextBlock
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import android.widget.EditText
+import android.widget.TextView
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 class TextBlockDetailDialog : DialogFragment() {
+
+    var onDismissListener: (() -> Unit)? = null
 
     private var pageId: Long = -1
     private lateinit var textBlock: TextBlock
@@ -30,6 +34,12 @@ class TextBlockDetailDialog : DialogFragment() {
         }
     }
 
+    override fun onDismiss(dialog: DialogInterface) {
+        super.onDismiss(dialog)
+        // Gọi hàm listener nếu nó đã được thiết lập
+        onDismissListener?.invoke()
+    }
+
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val view = LayoutInflater.from(requireContext())
             .inflate(R.layout.dialog_text_block_detail, null)
@@ -37,7 +47,7 @@ class TextBlockDetailDialog : DialogFragment() {
         setupViews(view)
 
         return MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Text Block Details")
+            .setTitle("Edit Translation")
             .setView(view)
             .setPositiveButton("Save") { _, _ ->
                 saveChanges(view)
@@ -49,42 +59,108 @@ class TextBlockDetailDialog : DialogFragment() {
             .create()
     }
 
-    private fun setupViews(view: View) {
+    private fun setupViews(view: android.view.View) {
         val tvOriginalText = view.findViewById<TextView>(R.id.tvOriginalText)
         val etEditText = view.findViewById<EditText>(R.id.etEditText)
         val tvLanguage = view.findViewById<TextView>(R.id.tvLanguage)
         val tvConfidence = view.findViewById<TextView>(R.id.tvConfidence)
 
         tvOriginalText.text = textBlock.originalText
-        etEditText.setText(textBlock.originalText)
+
+        // ⭐ FIX: Show translation if available, otherwise show original
+        val displayText = if (textBlock.translatedText.isNotEmpty()) {
+            textBlock.translatedText
+        } else {
+            textBlock.originalText
+        }
+        etEditText.setText(displayText)
+
         tvLanguage.text = "Language: ${getLanguageName(textBlock.language)}"
         tvConfidence.text = "Confidence: ${(textBlock.confidence * 100).toInt()}%"
+
+        // ⭐ NEW: Show translation status
+        if (textBlock.translatedText.isNotEmpty()) {
+            tvLanguage.append(" → Vietnamese (Translated)")
+        }
     }
 
-    private fun saveChanges(view: View) {
+    private fun saveChanges(view: android.view.View) {
         val etEditText = view.findViewById<EditText>(R.id.etEditText)
         val newText = etEditText.text.toString()
 
-        // TODO: Update the text block in database
-        // This will require updating PageEntity's ocrDataJson
+        lifecycleScope.launch {
+            try {
+                val db = AppDatabase.getDatabase(requireContext())
+                val page = db.pageDao().getPageByIdSync(pageId)
 
-        // For now, just show a message
-        android.widget.Toast.makeText(
-            requireContext(),
-            "Text updated (save functionality coming soon)",
-            android.widget.Toast.LENGTH_SHORT
-        ).show()
+                if (page?.ocrDataJson != null) {
+                    // Parse existing OCR data
+                    val ocrData = Json.decodeFromString<OcrData>(page.ocrDataJson)
+
+                    // Find and update the text block
+                    val updatedBlocks = ocrData.textBlocks.map { block ->
+                        if (block.id == textBlock.id) {
+                            // ⭐ Update translated text, mark as manually edited
+                            block.copy(
+                                translatedText = newText,
+                                isManuallyEdited = true
+                            )
+                        } else {
+                            block
+                        }
+                    }
+
+                    // Save back to database
+                    val updatedOcrData = ocrData.copy(textBlocks = updatedBlocks)
+                    val jsonData = Json.encodeToString(updatedOcrData)
+
+                    db.pageDao().updateOcrData(
+                        pageId = pageId,
+                        ocrDataJson = jsonData,
+                        isProcessed = true,
+                        language = page.ocrLanguage ?: "unknown",
+                        timestamp = System.currentTimeMillis()
+                    )
+
+                    android.util.Log.d("TextBlockDialog", "✅ Updated translation for block ${textBlock.id}")
+
+                    // Notify success
+                    android.widget.Toast.makeText(
+                        requireContext(),
+                        "Translation updated",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+
+                    // TODO: Notify parent to refresh view
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("TextBlockDialog", "Failed to update translation", e)
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "Failed to save: ${e.message}",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
     }
 
     private fun copyToClipboard() {
         val clipboard = requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE)
                 as android.content.ClipboardManager
-        val clip = android.content.ClipData.newPlainText("OCR Text", textBlock.originalText)
+
+        // ⭐ Copy translation if available
+        val textToCopy = if (textBlock.translatedText.isNotEmpty()) {
+            textBlock.translatedText
+        } else {
+            textBlock.originalText
+        }
+
+        val clip = android.content.ClipData.newPlainText("Text", textToCopy)
         clipboard.setPrimaryClip(clip)
 
         android.widget.Toast.makeText(
             requireContext(),
-            "Text copied to clipboard",
+            "Copied to clipboard",
             android.widget.Toast.LENGTH_SHORT
         ).show()
     }
@@ -94,6 +170,7 @@ class TextBlockDetailDialog : DialogFragment() {
             "zh" -> "Chinese (中文)"
             "en" -> "English"
             "ja" -> "Japanese (日本語)"
+            "vi" -> "Vietnamese (Tiếng Việt)"
             else -> code
         }
     }
