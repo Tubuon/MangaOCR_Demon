@@ -1,28 +1,23 @@
 package com.example.mangaocr_demon
 
 import android.os.Bundle
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import android.view.WindowManager
-import android.view.animation.AnimationUtils
+import android.view.*
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.viewpager2.widget.ViewPager2
 import com.example.mangaocr_demon.data.AppDatabase
+import com.example.mangaocr_demon.data.MangaRepository
 import com.example.mangaocr_demon.data.PageEntity
-import com.example.mangaocr_demon.data.model.TextBlock
 import com.example.mangaocr_demon.databinding.FragmentChapterReaderBinding
+import com.example.mangaocr_demon.ml.GeminiTranslator
+import com.example.mangaocr_demon.ml.OcrEngine
+import com.example.mangaocr_demon.ui.SettingsManager
 import com.example.mangaocr_demon.ui.manga.PageAdapter
 import com.example.mangaocr_demon.ui.manga.PageVerticalAdapter
 import com.example.mangaocr_demon.ui.viewmodel.ChapterReaderViewModel
 import com.example.mangaocr_demon.ui.viewmodel.ChapterReaderViewModelFactory
-import com.example.mangaocr_demon.ui.viewmodel.OcrViewModel
-import com.example.mangaocr_demon.ui.SettingsManager
-import com.example.mangaocr_demon.ui.reader.TextBlockDetailDialog
-import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 
 class ChapterReaderFragment : Fragment() {
@@ -30,26 +25,36 @@ class ChapterReaderFragment : Fragment() {
     private var _binding: FragmentChapterReaderBinding? = null
     private val binding get() = _binding!!
 
-    private lateinit var ocrViewModel: OcrViewModel
-
-    private var currentPages: List<PageEntity> = emptyList()
-    private var isFabMenuExpanded = false
-    private lateinit var pageAdapter: PageAdapter
-    private lateinit var pageVerticalAdapter: PageVerticalAdapter
     private lateinit var viewModel: ChapterReaderViewModel
-    private lateinit var settingsManager: SettingsManager
+    private lateinit var database: AppDatabase
+    private lateinit var settings: SettingsManager
 
-    private var chapterId: Long = -1L
+    private var chapterId: Long = -1
+    private var pageAdapter: PageAdapter? = null
+    private var verticalAdapter: PageVerticalAdapter? = null
+
+    companion object {
+        private const val ARG_CHAPTER_ID = "chapterId"
+
+        fun newInstance(id: Long): ChapterReaderFragment =
+            ChapterReaderFragment().apply {
+                arguments = Bundle().apply {
+                    putLong(ARG_CHAPTER_ID, id)
+                }
+            }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        arguments?.let {
-            chapterId = it.getLong("chapterId", -1L)
-        }
+
+        chapterId = arguments?.getLong(ARG_CHAPTER_ID) ?: -1
+        database = AppDatabase.getDatabase(requireContext())
+        settings = SettingsManager(requireContext())
     }
 
     override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?,
+        inflater: LayoutInflater,
+        container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
         _binding = FragmentChapterReaderBinding.inflate(inflater, container, false)
@@ -59,565 +64,151 @@ class ChapterReaderFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        settingsManager = SettingsManager(requireContext())
-
-        // Apply settings
-        applyTheme()
-        applyReadingMode()
-        applyScreenSettings()
         setupViewModel()
-        setupOcrViewModel()
-        setupBackButton()
-        setupOcrControls()
-    }
+        setupReadingMode()
+        observePages()
+        observeProcessingState()
 
-    private fun debugShowOverlay() {
-        val currentPosition = binding.viewPagerPages.currentItem
-        if (currentPosition >= 0 && currentPosition < currentPages.size) {
-            val page = currentPages[currentPosition]
-
-            android.util.Log.d("ChapterReaderFragment", "🔍 Current page: ${page.id}")
-            android.util.Log.d("ChapterReaderFragment", "🔍 isOcrProcessed: ${page.isOcrProcessed}")
-            android.util.Log.d("ChapterReaderFragment", "🔍 ocrDataJson: ${page.ocrDataJson?.take(200)}")
-
-            lifecycleScope.launch {
-                // Force reload this specific page
-                val db = AppDatabase.getDatabase(requireContext())
-                val freshPage = db.pageDao().getPageByIdSync(page.id)
-
-                android.util.Log.d("ChapterReaderFragment", "🔄 Fresh page from DB:")
-                android.util.Log.d("ChapterReaderFragment", "  - isOcrProcessed: ${freshPage?.isOcrProcessed}")
-                android.util.Log.d("ChapterReaderFragment", "  - ocrDataJson length: ${freshPage?.ocrDataJson?.length}")
-
-                if (freshPage != null) {
-                    // Update the list
-                    val updatedList = currentPages.toMutableList()
-                    updatedList[currentPosition] = freshPage
-                    currentPages = updatedList
-
-                    // Force adapter update
-                    pageAdapter.submitList(null)
-                    pageAdapter.submitList(updatedList)
-                    pageAdapter.notifyItemChanged(currentPosition)
-
-                    android.util.Log.d("ChapterReaderFragment", "✅ Forced adapter update")
-                }
-            }
-        }
-    }
-
-
-    private fun applyTheme() {
-        val bgColor = settingsManager.getThemeBackgroundColor()
-        val textColor = settingsManager.getThemeTextColor()
-
-        binding.root.setBackgroundColor(bgColor)
-        binding.tvChapterTitle.setTextColor(textColor)
-        binding.tvPageIndicator.setTextColor(textColor)
-
-        when (settingsManager.theme) {
-            SettingsManager.THEME_LIGHT -> {
-                binding.header.setBackgroundColor(0xCCFFFFFF.toInt())
-            }
-            SettingsManager.THEME_SEPIA -> {
-                binding.header.setBackgroundColor(0xCCF4ECD8.toInt())
-            }
-            else -> {
-                binding.header.setBackgroundColor(0x80000000.toInt())
-            }
-        }
-    }
-
-    private fun applyReadingMode() {
-        when (settingsManager.readingMode) {
-            SettingsManager.MODE_VERTICAL -> setupVerticalMode()
-            SettingsManager.MODE_WEBTOON -> setupWebtoonMode()
-            else -> setupHorizontalMode()
-        }
-    }
-
-    private fun setupHorizontalMode() {
-        binding.viewPagerPages.visibility = View.VISIBLE
-        binding.recyclerViewPages.visibility = View.GONE
-
-        pageAdapter = PageAdapter (
-            onPageLongClick = { page ->
-            processOcrForPage(page)
-            },
-            onTextBlockClick = { page, textBlock ->
-                showTextBlockDetails(page, textBlock)
-            }
-        )
-        binding.viewPagerPages.apply {
-            adapter = pageAdapter
-            orientation = ViewPager2.ORIENTATION_HORIZONTAL
-        }
-
-        binding.viewPagerPages.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
-            override fun onPageSelected(position: Int) {
-                super.onPageSelected(position)
-                updatePageIndicator(position, pageAdapter.itemCount)
-            }
-        })
-    }
-
-    private fun setupVerticalMode() {
-        binding.viewPagerPages.visibility = View.GONE
-        binding.recyclerViewPages.visibility = View.VISIBLE
-
-        pageVerticalAdapter = PageVerticalAdapter { page ->
-            // TODO: Handle OCR/translate on long click
-        }
-
-        binding.recyclerViewPages.apply {
-            layoutManager = LinearLayoutManager(requireContext())
-            adapter = pageVerticalAdapter
-        }
-    }
-
-    private fun setupWebtoonMode() {
-        // Webtoon mode is similar to vertical but with continuous scrolling
-        setupVerticalMode()
-        // You can add specific webtoon features here like:
-        // - Seamless scrolling between chapters
-        // - Auto-load next chapter
-        // - Different spacing between images
-    }
-
-    private fun applyScreenSettings() {
-        if (settingsManager.keepScreenOn) {
-            requireActivity().window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        } else {
-            requireActivity().window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        }
-
-        val brightness = settingsManager.brightness
-        if (brightness >= 0) {
-            val layoutParams = requireActivity().window.attributes
-            layoutParams.screenBrightness = brightness / 100f
-            requireActivity().window.attributes = layoutParams
-        }
+        binding.tvChapterTitle?.text = "Chapter $chapterId"
     }
 
     private fun setupViewModel() {
-        val db = AppDatabase.getDatabase(requireContext())
-        val factory = ChapterReaderViewModelFactory(
-            db.pageDao(),
-            db.chapterDao(),
-            chapterId
+        val repo = MangaRepository(
+            database.mangaDao(),
+            database.chapterDao(),
+            database.pageDao()
         )
-        viewModel = ViewModelProvider(this, factory)[ChapterReaderViewModel::class.java]
 
-        viewModel.chapter.observe(viewLifecycleOwner) { chapter ->
-            binding.tvChapterTitle.text = "Chapter ${chapter?.number ?: ""}"
-        }
+        val ocr = OcrEngine(requireContext())
+        val translator = GeminiTranslator(requireContext())
 
-        viewModel.pages.observe(viewLifecycleOwner) { pages ->
-            currentPages = pages // ⭐ Store current pages
+        viewModel = ViewModelProvider(
+            this,
+            ChapterReaderViewModelFactory(
+                repo,
+                database.historyDao(),
+                ocr,
+                translator,
+                chapterId
+            )
+        )[ChapterReaderViewModel::class.java]
+    }
 
-            when (settingsManager.readingMode) {
-                SettingsManager.MODE_VERTICAL, SettingsManager.MODE_WEBTOON -> {
-                    pageVerticalAdapter.submitList(pages)
-                }
-                else -> {
-                    pageAdapter.submitList(pages)
-                }
-            }
-
-            if (pages.isNotEmpty()) {
-                updatePageIndicator(0, pages.size)
-            }
+    // =================== UI =====================
+    private fun setupReadingMode() {
+        when (settings.readingMode) {
+            SettingsManager.MODE_HORIZONTAL -> setupHorizontal()
+            else -> setupVertical()
         }
     }
 
-    private fun setupBackButton() {
-        binding.btnBack.setOnClickListener {
-            if (settingsManager.brightness >= 0) {
-                val layoutParams = requireActivity().window.attributes
-                layoutParams.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-                requireActivity().window.attributes = layoutParams
-            }
-            parentFragmentManager.popBackStack()
-        }
+    private fun setupHorizontal() {
+        binding.recyclerViewPages?.visibility = View.GONE
+        binding.viewPagerPages?.visibility = View.VISIBLE
+
+        pageAdapter = PageAdapter(
+            onPageClick = { toggleHeader() },
+            onPageLongClick = { page -> showOcrDialog(page) }
+        )
+
+        binding.viewPagerPages?.adapter = pageAdapter
     }
 
-    private fun updatePageIndicator(currentPage: Int, totalPages: Int) {
-        binding.tvPageIndicator.text = "${currentPage + 1} / $totalPages"
-    }
-    private fun setupOcrViewModel() {
-        ocrViewModel = ViewModelProvider(this)[OcrViewModel::class.java]
+    private fun setupVertical() {
+        binding.recyclerViewPages?.visibility = View.VISIBLE
+        binding.viewPagerPages?.visibility = View.GONE
 
-        // OCR progress
-        ocrViewModel.ocrProgress.observe(viewLifecycleOwner) { progress ->
-            handleOcrProgress(progress)
-        }
+        verticalAdapter = PageVerticalAdapter(
+            onPageClick = { toggleHeader() },
+            onPageLongClick = { page -> showOcrDialog(page) }
+        )
 
-        // ⭐ Translation progress
-        ocrViewModel.translationProgress.observe(viewLifecycleOwner) { progress ->
-            handleTranslationProgress(progress)
-        }
-
-        // Errors
-        ocrViewModel.ocrError.observe(viewLifecycleOwner) { error ->
-            error?.let {
-                showError(it)
-                ocrViewModel.clearError()
-            }
-        }
+        binding.recyclerViewPages?.layoutManager = LinearLayoutManager(requireContext())
+        binding.recyclerViewPages?.adapter = verticalAdapter
     }
 
-    // ⭐ NEW: Handle translation progress
-    private fun handleTranslationProgress(progress: OcrViewModel.TranslationProgress) {
-        when (progress) {
-            is OcrViewModel.TranslationProgress.Idle -> {
-                binding.cardOcrProgress.visibility = View.GONE
-            }
+    // =================== DATA OBSERVER =====================
+    private fun observePages() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.state.collect { pageState ->
+                val pages = pageState.pages
 
-            is OcrViewModel.TranslationProgress.Processing -> {
-                binding.cardOcrProgress.visibility = View.VISIBLE
-                binding.tvOcrProgress.text = "Translating with Gemini..."
-            }
-
-            is OcrViewModel.TranslationProgress.Success -> {
-                binding.cardOcrProgress.visibility = View.GONE
-
-                Snackbar.make(
-                    binding.root,
-                    "Translated ${progress.translatedCount} text blocks",
-                    Snackbar.LENGTH_LONG
-                ).show()
-
-                // Refresh page to show translation
-                forceReloadPages()
-            }
-
-            is OcrViewModel.TranslationProgress.Error -> {
-                binding.cardOcrProgress.visibility = View.GONE
-                showError("Translation failed: ${progress.message}")
-            }
-        }
-    }
-
-
-
-
-    private fun setupOcrControls() {
-        // FAB Menu toggle
-        binding.fabOcrMenu.setOnClickListener {
-            toggleFabMenu()
-        }
-
-        // Scan current page
-        binding.fabScanPage.setOnClickListener {
-            scanCurrentPage()
-            toggleFabMenu()
-        }
-
-        binding.fabToggleOverlay.setOnClickListener {
-            translateCurrentPage()
-            toggleFabMenu()
-        }
-
-        binding.fabScanPage.setOnLongClickListener {
-            clearOcrForCurrentPage()
-            toggleFabMenu()
-            true
-        }
-
-        // Debug mode toggle
-        binding.fabDebugMode.setOnClickListener {
-            toggleDebugMode()
-            toggleFabMenu()
-        }
-    }
-
-    // ⭐ NEW: Translate current page
-    private fun translateCurrentPage() {
-        val currentPosition = when (settingsManager.readingMode) {
-            SettingsManager.MODE_VERTICAL, SettingsManager.MODE_WEBTOON -> {
-                (binding.recyclerViewPages.layoutManager as? LinearLayoutManager)
-                    ?.findFirstVisibleItemPosition() ?: 0
-            }
-            else -> binding.viewPagerPages.currentItem
-        }
-
-        if (currentPosition >= 0 && currentPosition < currentPages.size) {
-            val page = currentPages[currentPosition]
-
-            if (!page.isOcrProcessed) {
-                showError("Please scan the page first")
-                return
-            }
-
-            ocrViewModel.translatePage(page)
-        } else {
-            showError("No page selected")
-        }
-    }
-
-
-
-
-
-
-    private fun clearOcrForCurrentPage() {
-        val currentPosition = when (settingsManager.readingMode) {
-            SettingsManager.MODE_VERTICAL, SettingsManager.MODE_WEBTOON -> {
-                (binding.recyclerViewPages.layoutManager as? LinearLayoutManager)
-                    ?.findFirstVisibleItemPosition() ?: 0
-            }
-            else -> binding.viewPagerPages.currentItem
-        }
-
-        if (currentPosition >= 0 && currentPosition < currentPages.size) {
-            val page = currentPages[currentPosition]
-
-            android.util.Log.d("ChapterReaderFragment", "🗑️ Clearing OCR data for page ${page.id}")
-
-            lifecycleScope.launch {
-                try {
-                    val db = AppDatabase.getDatabase(requireContext())
-                    db.pageDao().updateOcrData(
-                        pageId = page.id,
-                        ocrDataJson = "",
-                        isProcessed = false,
-                        language = "",
-                        timestamp = 0L
-                    )
-
-                    android.util.Log.d("ChapterReaderFragment", "✅ OCR data cleared")
-
-                    Snackbar.make(
-                        binding.root,
-                        "OCR data cleared. You can scan again.",
-                        Snackbar.LENGTH_SHORT
-                    ).show()
-
-                    // Refresh page
-                    refreshCurrentPage()
-
-                } catch (e: Exception) {
-                    android.util.Log.e("ChapterReaderFragment", "❌ Failed to clear OCR", e)
-                    showError("Failed to clear OCR: ${e.message}")
+                if (settings.readingMode == SettingsManager.MODE_HORIZONTAL) {
+                    pageAdapter?.submitList(pages)
+                } else {
+                    verticalAdapter?.submitList(pages)
                 }
             }
         }
     }
 
+    // ✅ FIXED: Dùng cardOcrProgress thay vì progressBar
+    private fun observeProcessingState() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.state.collect { state ->
+                // ✅ Hiển thị card OCR progress
+                _binding?.cardOcrProgress?.visibility = if (state.isProcessing) View.VISIBLE else View.GONE
 
+                // ✅ Cập nhật text progress nếu có
+                if (state.isProcessing) {
+                    _binding?.tvOcrProgress?.text = "Đang xử lý OCR & Dịch..."
+                }
 
-
-
-    private fun toggleFabMenu() {
-        isFabMenuExpanded = !isFabMenuExpanded
-
-        if (isFabMenuExpanded) {
-            binding.layoutOcrActions.visibility = View.VISIBLE
-            binding.fabOcrMenu.animate().rotation(45f).setDuration(200).start()
-        } else {
-            binding.layoutOcrActions.visibility = View.GONE
-            binding.fabOcrMenu.animate().rotation(0f).setDuration(200).start()
-        }
-    }
-
-    private fun scanCurrentPage() {
-        val currentPosition = when (settingsManager.readingMode) {
-            SettingsManager.MODE_VERTICAL, SettingsManager.MODE_WEBTOON -> {
-                (binding.recyclerViewPages.layoutManager as? LinearLayoutManager)
-                    ?.findFirstVisibleItemPosition() ?: 0
+                // Hiển thị error nếu có
+                state.errorMessage?.let { error ->
+                    toast(error)
+                }
             }
-            else -> binding.viewPagerPages.currentItem
-        }
-
-        if (currentPosition >= 0 && currentPosition < currentPages.size) {
-            val page = currentPages[currentPosition]
-
-            // ⭐ ALLOW RE-SCAN
-            if (page.isOcrProcessed) {
-                android.util.Log.d("ChapterReaderFragment", "🔄 Re-scanning already processed page")
-            }
-
-            processOcrForPage(page)
-        } else {
-            showError("No page selected")
         }
     }
 
-    private fun toggleOverlayForCurrentPage() {
-        // This will be handled by the adapter/view
-        // You can implement a callback to PageAdapter to toggle overlay
-        Snackbar.make(binding.root, "Overlay toggled", Snackbar.LENGTH_SHORT).show()
-    }
-
-    // ⭐ NEW: Toggle debug mode
-    private fun toggleDebugMode() {
-        // This will show bounding boxes around text blocks
-        Snackbar.make(binding.root, "Debug mode toggled", Snackbar.LENGTH_SHORT).show()
-    }
-
-    // ⭐ NEW: Process OCR for a page
-    private fun processOcrForPage(page: PageEntity) {
-        if (page.imageUri == null) {
-            showError("No image found")
+    // =================== OCR + DỊCH =====================
+    private fun showOcrDialog(page: PageEntity) {
+        // Check state thay vì local flag
+        if (viewModel.state.value.isProcessing) {
+            toast("Đang xử lý…")
             return
         }
 
-        // ⭐ REMOVED: Block that prevents re-scan
-        /*
-        if (page.isOcrProcessed) {
-            Snackbar.make(
-                binding.root,
-                "This page is already processed. Long press text to edit.",
-                Snackbar.LENGTH_SHORT
-            ).show()
-            return
-        }
-        */
-
-        android.util.Log.d("ChapterReaderFragment", "🔄 Processing OCR for page ${page.id}")
-        ocrViewModel.processPage(page)
-    }
-
-    private fun handleOcrProgress(progress: OcrViewModel.OcrProgress) {
-        when (progress) {
-            is OcrViewModel.OcrProgress.Idle -> {
-                binding.cardOcrProgress.visibility = View.GONE
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("OCR & Dịch")
+            .setMessage("Bạn muốn xử lý trang này?")
+            .setPositiveButton("Xử lý") { _, _ ->
+                processPage(page)
             }
-
-            is OcrViewModel.OcrProgress.Processing -> {
-                binding.cardOcrProgress.visibility = View.VISIBLE
-                binding.tvOcrProgress.text = "Processing OCR..."
-            }
-
-            is OcrViewModel.OcrProgress.NoTextFound -> {
-                binding.cardOcrProgress.visibility = View.GONE
-                Snackbar.make(
-                    binding.root,
-                    "No text found in this page",
-                    Snackbar.LENGTH_SHORT
-                ).show()
-            }
-
-            is OcrViewModel.OcrProgress.Success -> {
-                binding.cardOcrProgress.visibility = View.GONE
-
-                val message = "Found ${progress.textBlockCount} text blocks (${progress.language})"
-                android.util.Log.d("ChapterReaderFragment", "✅ OCR Success: $message")
-
-                Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG)
-                    .setAction("View") {
-                        // Scroll to the page
-                    }
-                    .show()
-
-                // ⭐ CRITICAL: Force reload from database
-                android.util.Log.d("ChapterReaderFragment", "🔄 Triggering force refresh...")
-                forceReloadPages()
-            }
-
-            is OcrViewModel.OcrProgress.Error -> {
-                binding.cardOcrProgress.visibility = View.GONE
-                showError("OCR Error: ${progress.message}")
-            }
-        }
-    }
-
-    private fun forceReloadPages() {
-        android.util.Log.d("ChapterReaderFragment", "🔄 Force reloading pages from database")
-
-        lifecycleScope.launch {
-            try {
-                val db = AppDatabase.getDatabase(requireContext())
-
-                // ⭐ Get fresh data from database
-                val freshPages = db.pageDao().getPagesByChapterIdSync(chapterId)
-
-                android.util.Log.d("ChapterReaderFragment", "📄 Loaded ${freshPages.size} fresh pages")
-
-                // Log OCR status of each page
-                freshPages.forEachIndexed { index, page ->
-                    android.util.Log.d("ChapterReaderFragment",
-                        "Page $index (id=${page.id}): isOcrProcessed=${page.isOcrProcessed}, " +
-                                "ocrDataJson length=${page.ocrDataJson?.length ?: 0}")
-                }
-
-                // ⭐ Update adapter with fresh data
-                currentPages = freshPages
-
-                when (settingsManager.readingMode) {
-                    SettingsManager.MODE_VERTICAL, SettingsManager.MODE_WEBTOON -> {
-                        android.util.Log.d("ChapterReaderFragment", "📱 Updating vertical adapter")
-                        pageVerticalAdapter.submitList(null) // Clear first
-                        pageVerticalAdapter.submitList(freshPages)
-                        pageVerticalAdapter.notifyDataSetChanged()
-                    }
-                    else -> {
-                        android.util.Log.d("ChapterReaderFragment", "📱 Updating horizontal adapter")
-                        pageAdapter.submitList(null) // Clear first
-                        pageAdapter.submitList(freshPages)
-                        pageAdapter.notifyDataSetChanged()
-                    }
-                }
-
-                android.util.Log.d("ChapterReaderFragment", "✅ Adapter updated")
-
-            } catch (e: Exception) {
-                android.util.Log.e("ChapterReaderFragment", "❌ Error reloading pages", e)
-                showError("Failed to reload: ${e.message}")
-            }
-        }
-    }
-
-
-
-
-
-    private fun refreshCurrentPage() {
-        // Trigger a refresh of the LiveData
-        viewModel.pages.value?.let { pages ->
-            when (settingsManager.readingMode) {
-                SettingsManager.MODE_VERTICAL, SettingsManager.MODE_WEBTOON -> {
-                    pageVerticalAdapter.submitList(pages)
-                    pageVerticalAdapter.notifyDataSetChanged()
-                }
-                else -> {
-                    pageAdapter.submitList(pages)
-                    pageAdapter.notifyDataSetChanged()
-                }
-            }
-        }
-    }
-
-    private fun showTextBlockDetails(page: PageEntity, textBlock: TextBlock) {
-        val dialog = TextBlockDetailDialog.newInstance(page.id, textBlock)
-        dialog.show(childFragmentManager, "TextBlockDetailDialog")
-    }
-
-    private fun showError(message: String) {
-        Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG)
-            .setBackgroundTint(resources.getColor(android.R.color.holo_red_dark, null))
+            .setNegativeButton("Hủy", null)
             .show()
+    }
+
+    private fun processPage(page: PageEntity) {
+        toast("Đang OCR/Dịch…")
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.processPageOcrAndTranslate(page)
+
+            // Kiểm tra kết quả
+            val state = viewModel.state.value
+            if (state.errorMessage == null) {
+                toast("✅ Xong!")
+            } else {
+                toast("❌ ${state.errorMessage}")
+            }
+        }
+    }
+
+    private fun toggleHeader() {
+        binding.header?.visibility =
+            if (binding.header?.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+    }
+
+    private fun toast(msg: String) {
+        if (isAdded && context != null) {
+            Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
-
-        requireActivity().window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
-        val layoutParams = requireActivity().window.attributes
-        layoutParams.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-        requireActivity().window.attributes = layoutParams
-
         _binding = null
-    }
-
-    companion object {
-        fun newInstance(chapterId: Long): ChapterReaderFragment {
-            return ChapterReaderFragment().apply {
-                arguments = Bundle().apply {
-                    putLong("chapterId", chapterId)
-                }
-            }
-        }
     }
 }

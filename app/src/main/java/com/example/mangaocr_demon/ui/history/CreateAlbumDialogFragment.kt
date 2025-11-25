@@ -4,6 +4,8 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
+import androidx.core.os.bundleOf
 import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.lifecycleScope
 import com.example.mangaocr_demon.data.AlbumEntity
@@ -15,7 +17,6 @@ class CreateAlbumDialogFragment : DialogFragment() {
 
     private var _binding: DialogCreateAlbumBinding? = null
     private val binding get() = _binding!!
-
     private lateinit var db: AppDatabase
 
     companion object {
@@ -38,13 +39,8 @@ class CreateAlbumDialogFragment : DialogFragment() {
 
         db = AppDatabase.getDatabase(requireContext())
 
-        binding.btnCancel.setOnClickListener {
-            dismiss()
-        }
-
-        binding.btnCreate.setOnClickListener {
-            createAlbum()
-        }
+        binding.btnCancel.setOnClickListener { dismiss() }
+        binding.btnCreate.setOnClickListener { createAlbum() }
     }
 
     private fun createAlbum() {
@@ -56,16 +52,42 @@ class CreateAlbumDialogFragment : DialogFragment() {
             return
         }
 
+        // ✅ FIXED: Dùng constructor mới với title
         val album = AlbumEntity(
-            name = name,
+            title = name, // ✅ CHANGED from name to title
             description = description.ifEmpty { null },
-            createdAt = System.currentTimeMillis()
+            color = generateRandomColor(),
+            created_at = System.currentTimeMillis()
         )
 
         lifecycleScope.launch {
-            db.albumDao().insert(album)
-            dismiss()
+            try {
+                db.albumDao().insert(album)
+
+                parentFragmentManager.setFragmentResult(
+                    "album_created",
+                    bundleOf("success" to true)
+                )
+
+                if (isAdded) {
+                    Toast.makeText(requireContext(), "Đã tạo album: $name", Toast.LENGTH_SHORT).show()
+                    dismiss()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                if (isAdded) {
+                    Toast.makeText(requireContext(), "Lỗi: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
+    }
+
+    private fun generateRandomColor(): String {
+        val colors = listOf(
+            "#4CAF50", "#2196F3", "#FF9800", "#E91E63",
+            "#9C27B0", "#00BCD4", "#CDDC39", "#FF5722"
+        )
+        return colors.random()
     }
 
     override fun onDestroyView() {

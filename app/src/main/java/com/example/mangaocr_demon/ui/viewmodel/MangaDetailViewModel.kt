@@ -1,21 +1,31 @@
-package com.example.mangaocr_demon.viewmodel
+package com.example.mangaocr_demon.ui.viewmodel
 
-import androidx.lifecycle.*
-import com.example.mangaocr_demon.data.ChapterDao
-import com.example.mangaocr_demon.data.MangaDao
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.mangaocr_demon.data.AlbumRepository
 import com.example.mangaocr_demon.data.ChapterEntity
-import com.example.mangaocr_demon.data.MangaEntity
-import kotlinx.coroutines.flow.map
+import com.example.mangaocr_demon.data.MangaRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 
 class MangaDetailViewModel(
-    private val mangaDao: MangaDao,
-    private val chapterDao: ChapterDao,
-    private val mangaId: Long
+    private val mangaRepo: MangaRepository,
+    private val albumRepo: AlbumRepository,
+    private val albumId: Long
 ) : ViewModel() {
 
-    val manga: LiveData<MangaEntity?> =
-        mangaDao.getMangaById(mangaId).asLiveData()
+    val chapters: Flow<List<ChapterEntity>> = mangaRepo.getChaptersByAlbumIdFlow(albumId)
 
-    val chapters: LiveData<List<ChapterEntity>> =
-        chapterDao.getChaptersForManga(mangaId).asLiveData()
+    fun deleteChapter(chapter: ChapterEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            mangaRepo.deleteChapter(chapter)
+        }
+    }
+
+    fun addChapterToAlbum(chapterId: Long, albumId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            albumRepo.addChapterToAlbum(albumId, chapterId)
+        }
+    }
 }

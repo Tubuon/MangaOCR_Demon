@@ -1,31 +1,33 @@
 package com.example.mangaocr_demon.data
 
-import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 
 @Entity(
-    tableName = "album_chapter",
-    primaryKeys = ["album_id", "chapter_id"],
+    tableName = "album_chapters",
+    primaryKeys = ["albumId", "chapterId"],
     foreignKeys = [
         ForeignKey(
             entity = AlbumEntity::class,
             parentColumns = ["id"],
-            childColumns = ["album_id"],
+            childColumns = ["albumId"],
             onDelete = ForeignKey.CASCADE
         ),
         ForeignKey(
             entity = ChapterEntity::class,
             parentColumns = ["id"],
-            childColumns = ["chapter_id"],
+            childColumns = ["chapterId"],
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index(value = ["album_id"]), Index(value = ["chapter_id"])]
+    indices = [
+        Index(value = ["albumId"]),
+        Index(value = ["chapterId"])
+    ]
 )
 data class AlbumChapterEntity(
-    @ColumnInfo(name = "album_id") val albumId: Long,
-    @ColumnInfo(name = "chapter_id") val chapterId: Long,
-    @ColumnInfo(name = "added_at") val addedAt: Long = System.currentTimeMillis()
+    val albumId: Long,
+    val chapterId: Long,
+    val addedAt: Long = System.currentTimeMillis()
 )

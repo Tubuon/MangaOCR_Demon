@@ -1,4 +1,3 @@
-// File: ui/manga/PageAdapter.kt
 package com.example.mangaocr_demon.ui.manga
 
 import android.net.Uri
@@ -14,10 +13,10 @@ import com.example.mangaocr_demon.data.PageEntity
 import com.example.mangaocr_demon.data.model.TextBlock
 import com.example.mangaocr_demon.data.model.OcrData
 import com.example.mangaocr_demon.databinding.ItemPageBinding
-import com.ymg.pdf.viewer.PDFView
 import kotlinx.serialization.json.Json
 
 class PageAdapter(
+    private val onPageClick: (PageEntity) -> Unit, // ✅ ADDED
     private val onPageLongClick: (PageEntity) -> Unit,
     private val onTextBlockClick: ((PageEntity, TextBlock) -> Unit)? = null
 ) : ListAdapter<PageEntity, PageAdapter.PageViewHolder>(DiffCallback) {
@@ -52,6 +51,7 @@ class PageAdapter(
 
     class PageViewHolder(
         private val binding: ItemPageBinding,
+        private val onPageClick: (PageEntity) -> Unit, // ✅ ADDED
         private val onPageLongClick: (PageEntity) -> Unit,
         private val onTextBlockClick: ((PageEntity, TextBlock) -> Unit)?,
         private val json: Json
@@ -59,6 +59,12 @@ class PageAdapter(
         private var currentPage: PageEntity? = null
 
         init {
+            // ✅ ADDED: Short click handler
+            binding.root.setOnClickListener {
+                currentPage?.let { onPageClick(it) }
+            }
+
+            // Long click handler
             binding.root.setOnLongClickListener {
                 currentPage?.let {
                     onPageLongClick(it)
@@ -70,7 +76,6 @@ class PageAdapter(
         fun bind(page: PageEntity) {
             currentPage = page
 
-            // Reset all views
             binding.imageView.visibility = View.GONE
             binding.pdfView.visibility = View.GONE
             binding.loadingIndicator.visibility = View.GONE
@@ -82,20 +87,9 @@ class PageAdapter(
                 else -> bindImagePage(page)
             }
 
-            // Show indicators
-            binding.ocrIndicator.visibility = if (page.isOcrProcessed) {
-                View.VISIBLE
-            } else {
-                View.GONE
-            }
+            binding.ocrIndicator.visibility = if (page.isOcrProcessed) View.VISIBLE else View.GONE
+            binding.translationIndicator.visibility = if (!page.translatedText.isNullOrEmpty()) View.VISIBLE else View.GONE
 
-            binding.translationIndicator.visibility = if (!page.translatedText.isNullOrEmpty()) {
-                View.VISIBLE
-            } else {
-                View.GONE
-            }
-
-            // Load OCR overlay
             loadOcrOverlay(page)
         }
 
@@ -104,11 +98,7 @@ class PageAdapter(
 
             if (payloads.contains("OCR_UPDATED")) {
                 loadOcrOverlay(page)
-                binding.ocrIndicator.visibility = if (page.isOcrProcessed) {
-                    View.VISIBLE
-                } else {
-                    View.GONE
-                }
+                binding.ocrIndicator.visibility = if (page.isOcrProcessed) View.VISIBLE else View.GONE
             } else {
                 bind(page)
             }
@@ -163,8 +153,6 @@ class PageAdapter(
             }
         }
 
-        // File: ui/manga/PageAdapter.kt
-
         private fun loadOcrOverlay(page: PageEntity) {
             if (page.ocrDataJson.isNullOrEmpty()) {
                 binding.overlayView.setTextBlocks(emptyList(), 0, 0)
@@ -174,15 +162,10 @@ class PageAdapter(
             try {
                 val ocrData = json.decodeFromString<OcrData>(page.ocrDataJson)
 
-                // ⭐ Wait for ImageView to load, then sync overlay
                 binding.imageView.post {
                     val imageViewWidth = binding.imageView.width
                     val imageViewHeight = binding.imageView.height
 
-                    android.util.Log.d("PageAdapter", "ImageView size: ${imageViewWidth}x${imageViewHeight}")
-                    android.util.Log.d("PageAdapter", "OCR image size: ${ocrData.imageWidth}x${ocrData.imageHeight}")
-
-                    // ⭐ Calculate actual display dimensions considering fitCenter
                     val imageAspect = ocrData.imageWidth.toFloat() / ocrData.imageHeight
                     val viewAspect = imageViewWidth.toFloat() / imageViewHeight
 
@@ -190,18 +173,14 @@ class PageAdapter(
                     var displayHeight = imageViewHeight
 
                     if (imageAspect > viewAspect) {
-                        // Image is wider - fit to width
                         displayHeight = (imageViewWidth / imageAspect).toInt()
                     } else {
-                        // Image is taller - fit to height
                         displayWidth = (imageViewHeight * imageAspect).toInt()
                     }
 
-                    android.util.Log.d("PageAdapter", "Calculated display size: ${displayWidth}x${displayHeight}")
-
                     binding.overlayView.setTextBlocks(
                         ocrData.textBlocks,
-                        displayWidth, // ⭐ Use calculated dimensions
+                        displayWidth,
                         displayHeight
                     )
                 }
@@ -235,7 +214,7 @@ class PageAdapter(
             parent,
             false
         )
-        return PageViewHolder(binding, onPageLongClick, onTextBlockClick, json)
+        return PageViewHolder(binding, onPageClick, onPageLongClick, onTextBlockClick, json)
     }
 
     override fun onBindViewHolder(holder: PageViewHolder, position: Int) {

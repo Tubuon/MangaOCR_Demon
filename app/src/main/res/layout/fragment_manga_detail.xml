@@ -1,23 +1,64 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp">
+    android:orientation="vertical">
 
-    <!-- Tên manga -->
-    <TextView
-        android:id="@+id/tvMangaTitle"
+    <!-- ✅ THÊM TOOLBAR -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Manga Title"
-        android:textSize="20sp"
-        android:textStyle="bold"
-        android:paddingBottom="12dp" />
+        android:layout_height="?attr/actionBarSize"
+        android:background="?attr/colorPrimary"
+        android:elevation="4dp"
+        app:title="Manga Detail"
+        app:titleTextColor="@android:color/white"
+        app:navigationIcon="@drawable/ic_arrow_back" />
 
-    <!-- Danh sách Chapter -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvChapters"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"/>
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Tên manga -->
+        <TextView
+            android:id="@+id/tvMangaTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Manga Title"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:paddingBottom="8dp" />
+
+        <!-- ✅ THÊM CHAPTER COUNT -->
+        <TextView
+            android:id="@+id/tvChapterCount"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="0 chapters"
+            android:textSize="14sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:paddingBottom="12dp" />
+
+        <!-- Danh sách Chapter -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvChapters"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- ✅ THÊM EMPTY STATE -->
+        <TextView
+            android:id="@+id/emptyState"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="Chưa có chapter nào"
+            android:textSize="16sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:visibility="gone" />
+    </LinearLayout>
 </LinearLayout>

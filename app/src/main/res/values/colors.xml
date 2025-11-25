@@ -19,29 +19,45 @@
     <color name="teal_200">#FF03DAC5</color>
     <color name="teal_700">#FF018786</color>
 
-    <!-- BACKGROUND & SURFACE -->
-    <color name="background_light">#FFFFFF</color>
-    <color name="surface_light">#FFFFFF</color>
+    <!-- =====================================================
+         ✅ THEME BACKGROUNDS (CHÍNH)
+         ===================================================== -->
+
+    <!-- LIGHT THEME (Sáng - nền trắng) -->
+    <color name="background_light">#FFFFFFFF</color>
+    <color name="surface_light">#FFFFFFFF</color>
     <color name="surface_variant_light">#F5F5F5</color>
 
-    <color name="background_dark">#121212</color>
-    <color name="surface_dark">#1E1E1E</color>
+    <!-- DARK THEME (Tối - nền đen xám) -->
+    <color name="background_dark">#FF121212</color>
+    <color name="surface_dark">#FF1E1E1E</color>
     <color name="surface_variant_dark">#2C2C2C</color>
 
-    <color name="background_sepia">#F5E5C0</color>
-    <color name="surface_sepia">#F5E5C0</color>
+    <!-- SEPIA THEME (Vàng cổ điển - nền be) -->
+    <color name="background_sepia">#FFF4ECD8</color>
+    <color name="surface_sepia">#FFF4ECD8</color>
 
-    <!-- TEXT COLORS -->
-    <color name="text_primary_light">#212121</color>
-    <color name="text_secondary_light">#757575</color>
-    <color name="text_tertiary_light">#9E9E9E</color>
-    <color name="text_disabled_light">#BDBDBD</color>
+    <!-- =====================================================
+         ✅ TEXT COLORS (MÀU CHỮ)
+         ===================================================== -->
 
-    <color name="text_primary_dark">#FFFFFF</color>
-    <color name="text_secondary_dark">#B0B0B0</color>
+    <!-- Light theme text (Chữ đen cho nền sáng) -->
+    <color name="text_primary_light">#FF212121</color>
+    <color name="text_secondary_light">#FF757575</color>
+    <color name="text_tertiary_light">#FF9E9E9E</color>
+    <color name="text_disabled_light">#FFBDBDBD</color>
 
-    <color name="text_dark">#000000</color>
-    <color name="text_light">#FFFFFF</color>
+    <!-- Dark theme text (Chữ trắng cho nền tối) -->
+    <color name="text_primary_dark">#FFFFFFFF</color>
+    <color name="text_secondary_dark">#FFB0B0B0</color>
+
+    <!-- Sepia theme text (Chữ nâu cho nền be) -->
+    <color name="text_primary_sepia">#FF5C4033</color>
+    <color name="text_secondary_sepia">#FF8B6F47</color>
+
+    <!-- Generic text colors -->
+    <color name="text_dark">#FF000000</color>
+    <color name="text_light">#FFFFFFFF</color>
 
     <!-- SEMANTIC COLORS -->
     <color name="success">#4CAF50</color>
@@ -82,4 +98,5 @@
     <!-- DIVIDERS -->
     <color name="divider_light">#E0E0E0</color>
     <color name="divider_dark">#2C2C2C</color>
+
 </resources>

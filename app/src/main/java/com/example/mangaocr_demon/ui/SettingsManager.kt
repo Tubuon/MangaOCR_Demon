@@ -33,10 +33,10 @@ class SettingsManager(private val context: Context) {
         set(value) = prefs.edit().putBoolean("keep_screen_on", value).apply()
 
     var brightness: Int
-        get() = prefs.getInt("brightness", -1)   // -1 nghĩa là mặc định
+        get() = prefs.getInt("brightness", -1)
         set(value) = prefs.edit().putInt("brightness", value).apply()
 
-    // 🟩 Thêm hàm này để sửa lỗi "Unresolved reference"
+    // ✅ LẤY MÀU NỀN THEO THEME
     fun getThemeBackgroundColor(): Int {
         return when (theme) {
             THEME_DARK -> ContextCompat.getColor(context, R.color.background_dark)
@@ -45,12 +45,30 @@ class SettingsManager(private val context: Context) {
         }
     }
 
+    // ✅ LẤY MÀU CHỮ THEO THEME
     fun getThemeTextColor(): Int {
         return when (theme) {
-            THEME_DARK -> ContextCompat.getColor(context, R.color.text_light) // chữ sáng cho nền tối
-            THEME_SEPIA -> ContextCompat.getColor(context, R.color.text_dark)  // chữ nâu đậm
-            else -> ContextCompat.getColor(context, R.color.text_dark)         // chữ đen cho nền sáng
+            THEME_DARK -> ContextCompat.getColor(context, R.color.text_primary_dark)
+            THEME_SEPIA -> ContextCompat.getColor(context, R.color.text_primary_sepia)
+            else -> ContextCompat.getColor(context, R.color.text_primary_light)
         }
     }
 
+    // ✅ LẤY MÀU CHỮ PHỤ (secondary text)
+    fun getThemeSecondaryTextColor(): Int {
+        return when (theme) {
+            THEME_DARK -> ContextCompat.getColor(context, R.color.text_secondary_dark)
+            THEME_SEPIA -> ContextCompat.getColor(context, R.color.text_secondary_sepia)
+            else -> ContextCompat.getColor(context, R.color.text_secondary_light)
+        }
+    }
+
+    // ✅ LẤY MÀU SURFACE (cho cards, containers)
+    fun getThemeSurfaceColor(): Int {
+        return when (theme) {
+            THEME_DARK -> ContextCompat.getColor(context, R.color.surface_dark)
+            THEME_SEPIA -> ContextCompat.getColor(context, R.color.surface_sepia)
+            else -> ContextCompat.getColor(context, R.color.surface_light)
+        }
+    }
 }

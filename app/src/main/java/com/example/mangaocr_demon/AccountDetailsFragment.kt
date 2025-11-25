@@ -7,17 +7,27 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import com.bumptech.glide.Glide
 import com.example.mangaocr_demon.databinding.FragmentAccountDetailsBinding
 import com.example.mangaocr_demon.data.AppDatabase
+import com.example.mangaocr_demon.data.MangaEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class AccountDetailsFragment : Fragment() {
 
     private var _binding: FragmentAccountDetailsBinding? = null
     private val binding get() = _binding!!
+
+    private lateinit var db: AppDatabase
+
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
+        db = AppDatabase.getDatabase(context)
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -29,7 +39,6 @@ class AccountDetailsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
         setupViews()
         loadUserInfo()
         loadStatistics()
@@ -43,75 +52,55 @@ class AccountDetailsFragment : Fragment() {
 
     private fun loadUserInfo() {
         val prefs = requireContext().getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-
-        val name = prefs.getString("user_name", "Người dùng") ?: "Người dùng"
-        val email = prefs.getString("user_email", "") ?: ""
-        val photoUrl = prefs.getString("user_photo", null)
-
-        binding.tvUserName.text = name
-        binding.tvUserEmail.text = email
-
-        if (photoUrl != null) {
-            Glide.with(this)
-                .load(photoUrl)
-                .circleCrop()
-                .placeholder(R.mipmap.ic_launcher)
-                .into(binding.ivUserAvatar)
-        }
+        val username = prefs.getString("username", "Guest")
+        val email = prefs.getString("email", "Chưa đăng nhập")
+        binding.tvUsername.text = username
+        binding.tvEmail.text = email
     }
 
     private fun loadStatistics() {
-        // Sử dụng lifecycleScope thay vì CoroutineScope
-        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+        lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val db = AppDatabase.getDatabase(requireContext())
-
-                // Đếm số manga
-                var mangaCount = 0
+                val mangaCount = db.mangaDao().getMangaCount()
                 var totalChapters = 0
                 var totalPages = 0
-                var historyCount = 0
 
-                // Lấy tất cả manga (chỉ collect 1 lần)
-                db.mangaDao().getAllManga().collect { mangas ->
-                    mangaCount = mangas.size
-
-                    // Đếm chapters và pages
-                    for (manga in mangas) {
-                        db.chapterDao().getChaptersForManga(manga.id).collect { chapters ->
-                            totalChapters += chapters.size
-
-                            for (chapter in chapters) {
-                                db.pageDao().getPagesForChapter(chapter.id).collect { pages ->
-                                    totalPages += pages.size
-                                }
-                            }
-                        }
+                val allManga: List<MangaEntity> = db.mangaDao().getAllMangaSync()
+                for (manga in allManga) {
+                    val chapters = db.chapterDao().getChaptersByAlbumIdSync(manga.id)
+                    totalChapters += chapters.size
+                    for (chapter in chapters) {
+                        totalPages += db.pageDao().getPageCountByChapterId(chapter.id)
                     }
+                }
 
-                    // Đếm lịch sử (sử dụng suspend function thay vì LiveData)
-                    // Nếu bạn có suspend function trong HistoryDao
-                    // historyCount = db.historyDao().getHistoryCount()
+                val historyCount = db.historyDao().getHistoryCount()
+                val albumCount = try { db.albumDao().getAlbumCount() } catch (e: Exception) { 0 }
 
-                    // Cập nhật UI trên Main thread
-                    withContext(Dispatchers.Main) {
-                        updateStatisticsUI(mangaCount, totalChapters, totalPages, historyCount)
-                    }
+                withContext(Dispatchers.Main) {
+                    updateStatisticsUI(mangaCount, totalChapters, totalPages, historyCount, albumCount)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
                 withContext(Dispatchers.Main) {
-                    updateStatisticsUI(0, 0, 0, 0)
+                    updateStatisticsUI(0, 0, 0, 0, 0)
                 }
             }
         }
     }
 
-    private fun updateStatisticsUI(mangaCount: Int, chapterCount: Int, pageCount: Int, historyCount: Int) {
+    private fun updateStatisticsUI(
+        mangaCount: Int,
+        chapterCount: Int,
+        pageCount: Int,
+        historyCount: Int,
+        albumCount: Int
+    ) {
         binding.tvMangaCount.text = mangaCount.toString()
         binding.tvChapterCount.text = chapterCount.toString()
         binding.tvPageCount.text = pageCount.toString()
         binding.tvHistoryCount.text = historyCount.toString()
+        binding.tvBackupCount.text = albumCount.toString()
     }
 
     override fun onDestroyView() {
@@ -120,8 +109,7 @@ class AccountDetailsFragment : Fragment() {
     }
 
     companion object {
-        fun newInstance(): AccountDetailsFragment {
-            return AccountDetailsFragment()
-        }
+        @JvmStatic
+        fun newInstance(): AccountDetailsFragment = AccountDetailsFragment()
     }
 }

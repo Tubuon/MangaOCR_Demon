@@ -5,19 +5,24 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.asLiveData
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.example.mangaocr_demon.ChapterReaderFragment
 import com.example.mangaocr_demon.data.AppDatabase
 import com.example.mangaocr_demon.data.ChapterEntity
 import com.example.mangaocr_demon.databinding.FragmentAlbumDetailBinding
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class AlbumDetailFragment : Fragment() {
 
     private var _binding: FragmentAlbumDetailBinding? = null
     private val binding get() = _binding!!
 
-    private lateinit var chapterAdapter: AlbumChapterAdapter  // ĐỔI TYPE
+    private lateinit var chapterAdapter: AlbumChapterAdapter
     private lateinit var db: AppDatabase
     private var albumId: Long = -1
 
@@ -26,9 +31,7 @@ class AlbumDetailFragment : Fragment() {
 
         fun newInstance(albumId: Long): AlbumDetailFragment {
             val fragment = AlbumDetailFragment()
-            val args = Bundle()
-            args.putLong(ARG_ALBUM_ID, albumId)
-            fragment.arguments = args
+            fragment.arguments = Bundle().apply { putLong(ARG_ALBUM_ID, albumId) }
             return fragment
         }
     }
@@ -36,12 +39,11 @@ class AlbumDetailFragment : Fragment() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         albumId = arguments?.getLong(ARG_ALBUM_ID) ?: -1
+        db = AppDatabase.getDatabase(requireContext())
     }
 
     override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
+        inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
     ): View {
         _binding = FragmentAlbumDetailBinding.inflate(inflater, container, false)
         return binding.root
@@ -49,22 +51,15 @@ class AlbumDetailFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
-        db = AppDatabase.getDatabase(requireContext())
-
-        setupRecyclerView()
-        loadAlbumData()
-        observeChapters()
+        setupUI()
+        loadAlbumDetails()
+        loadChapters()
     }
 
-    private fun setupRecyclerView() {
+    private fun setupUI() {
         chapterAdapter = AlbumChapterAdapter(
-            onChapterClick = { chapter ->
-                openChapterReader(chapter)
-            },
-            onChapterLongClick = { chapter ->
-                showChapterOptions(chapter)
-            }
+            onChapterClick = { chapter -> openChapterReader(chapter) },
+            onChapterLongClick = { chapter -> showChapterOptions(chapter) }
         )
 
         binding.rvChapters.apply {
@@ -73,47 +68,59 @@ class AlbumDetailFragment : Fragment() {
         }
     }
 
-    private fun loadAlbumData() {
+    private fun loadAlbumDetails() {
         lifecycleScope.launch {
-            db.albumDao().getAlbumById(albumId).collect { album ->
-                album?.let {
-                    binding.tvAlbumName.text = it.name
-                    binding.tvAlbumDescription.text = it.description ?: "Không có mô tả"
-                }
+            val album = db.albumDao().getAlbumById(albumId)
+            if (album != null) {
+                binding.tvAlbumName.text = album.title
+                binding.tvAlbumDescription.text = album.description ?: "Không có mô tả"
+                binding.tvChapterCount.text = "" // count sẽ set ở loadChapters
             }
         }
     }
 
-    private fun observeChapters() {
-        lifecycleScope.launch {
-            db.albumDao().getChaptersInAlbum(albumId).collect { chapters ->
+    private fun loadChapters() {
+        // Flow<List<ChapterEntity>> → LiveData → observe
+        db.albumChapterDao().getChaptersByAlbumId(albumId)
+            .asLiveData()
+            .observe(viewLifecycleOwner) { chapters ->
                 chapterAdapter.submitList(chapters)
-
-                if (chapters.isEmpty()) {
-                    binding.tvEmptyState.visibility = View.VISIBLE
-                    binding.rvChapters.visibility = View.GONE
-                } else {
-                    binding.tvEmptyState.visibility = View.GONE
-                    binding.rvChapters.visibility = View.VISIBLE
-                }
-
+                binding.tvEmptyState.visibility = if (chapters.isEmpty()) View.VISIBLE else View.GONE
+                binding.rvChapters.visibility = if (chapters.isEmpty()) View.GONE else View.VISIBLE
                 binding.tvChapterCount.text = "${chapters.size} chapters"
             }
-        }
     }
 
     private fun openChapterReader(chapter: ChapterEntity) {
-        // TODO: Navigate to ChapterReaderActivity
+        parentFragmentManager.beginTransaction()
+            .replace(
+                com.example.mangaocr_demon.R.id.fragment_container,
+                ChapterReaderFragment.newInstance(chapter.id)
+            )
+            .addToBackStack(null)
+            .commit()
     }
 
     private fun showChapterOptions(chapter: ChapterEntity) {
-        lifecycleScope.launch {
-            db.albumChapterDao().removeChapterFromAlbumById(albumId, chapter.id)
-        }
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Xóa khỏi Album?")
+            .setMessage("Chapter ${chapter.number}: ${chapter.title ?: ""}")
+            .setPositiveButton("Xóa") { _, _ ->
+                lifecycleScope.launch {
+                    db.albumChapterDao().removeChapterFromAlbumById(albumId, chapter.id)
+                }
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    // Nếu cần format ngày, có thể dùng
+    private fun formatTimestamp(timestamp: Long): String {
+        return SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(timestamp))
     }
 }

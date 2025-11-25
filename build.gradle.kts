@@ -8,7 +8,6 @@ plugins {
     id("com.google.gms.google-services") version "4.4.0" apply false
 }
 
-// ✅ Nếu có lỗi với plugin ở trên, dùng cách này thay thế:
 buildscript {
     dependencies {
         classpath("com.google.gms:google-services:4.4.0")

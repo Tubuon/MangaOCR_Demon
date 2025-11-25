@@ -1,7 +1,7 @@
-// File: ml/GeminiTranslator.kt
 package com.example.mangaocr_demon.ml
 
 import android.content.Context
+import com.example.mangaocr_demon.BuildConfig
 import com.example.mangaocr_demon.data.model.TextBlock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -12,7 +12,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
-import com.example.mangaocr_demon.BuildConfig
 
 class GeminiTranslator(private val context: Context) {
 
@@ -32,14 +31,45 @@ class GeminiTranslator(private val context: Context) {
     private val apiKey: String
         get() = BuildConfig.OPENAI_API_KEY
 
-    // Gemini model - có thể dùng: gemini-1.5-flash (nhanh, free tier cao),
-    // gemini-1.5-pro (chính xác hơn), gemini-2.0-flash-exp (mới nhất)
+    // Gemini model - có thể dùng: gemini-1.5-flash, gemini-1.5-pro, gemini-2.0-flash-exp
     private val model = "gemini-2.0-flash"
 
+    /**
+     * ✅ THÊM: Translate simple text (cho ChapterReaderViewModel)
+     * @param text Text cần dịch
+     * @param targetLang Mã ngôn ngữ đích (vi, en, ja, zh...)
+     * @return Text đã dịch hoặc null nếu lỗi
+     */
+    suspend fun translate(text: String, targetLang: String): String? {
+        if (text.isBlank()) return null
+
+        return withContext(Dispatchers.IO) {
+            try {
+                val prompt = buildSimpleTranslationPrompt(text, targetLang)
+                val response = callGeminiApi(prompt)
+
+                // Clean response (remove markdown, quotes, etc.)
+                response.trim()
+                    .removePrefix("```")
+                    .removeSuffix("```")
+                    .replace("\"", "")
+                    .trim()
+                    .takeIf { it.isNotBlank() }
+
+            } catch (e: Exception) {
+                android.util.Log.e("GeminiTranslator", "Simple translation failed", e)
+                null
+            }
+        }
+    }
+
+    /**
+     * Translate multiple text blocks (original method)
+     */
     suspend fun translateBlocks(textBlocks: List<TextBlock>): Result<List<TextBlock>> {
         return withContext(Dispatchers.IO) {
             try {
-                android.util.Log.d("GeminiTranslator", "🔄 Translating ${textBlocks.size} blocks")
+                android.util.Log.d("GeminiTranslator", "📄 Translating ${textBlocks.size} blocks")
 
                 val prompt = buildTranslationPrompt(textBlocks)
                 android.util.Log.d("GeminiTranslator", "📝 Prompt: $prompt")
@@ -57,6 +87,35 @@ class GeminiTranslator(private val context: Context) {
                 Result.failure(e)
             }
         }
+    }
+
+    /**
+     * ✅ THÊM: Build prompt for simple text translation
+     */
+    private fun buildSimpleTranslationPrompt(text: String, targetLang: String): String {
+        val targetLanguage = when (targetLang.lowercase()) {
+            "vi", "vietnamese" -> "Vietnamese"
+            "en", "english" -> "English"
+            "ja", "japanese" -> "Japanese"
+            "zh", "chinese" -> "Chinese"
+            else -> "Vietnamese"
+        }
+
+        return """
+Translate the following text to $targetLanguage.
+
+Guidelines:
+- Maintain the original meaning and tone
+- Use natural $targetLanguage language
+- Keep it concise
+- DO NOT add any explanations or notes
+- ONLY return the translated text
+
+Text to translate:
+"$text"
+
+Translation:
+        """.trimIndent()
     }
 
     private fun buildTranslationPrompt(textBlocks: List<TextBlock>): String {
@@ -77,7 +136,6 @@ Guidelines:
 - Use natural Vietnamese language, not literal translation
 - The translation MUST be a single-line string with NO line breaks.
 - Absolutely DO NOT insert any newline characters, including actual newlines or \n.
-
 
 Input (JSON array):
 [$textsJson]
@@ -116,7 +174,6 @@ Respond ONLY with the JSON array, no additional text or markdown.
 
         val jsonBody = json.encodeToString(GeminiRequest.serializer(), requestBody)
 
-        // Gemini API endpoint
         val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
 
         val request = Request.Builder()
@@ -138,7 +195,6 @@ Respond ONLY with the JSON array, no additional text or markdown.
 
         val geminiResponse = json.decodeFromString<GeminiResponse>(responseBody)
 
-        // Extract text from response
         val text = geminiResponse.candidates?.firstOrNull()
             ?.content?.parts?.firstOrNull()?.text
             ?: throw Exception("No response from Gemini")
@@ -147,7 +203,6 @@ Respond ONLY with the JSON array, no additional text or markdown.
     }
 
     private fun parseTranslationResponse(response: String, originalBlocks: List<TextBlock>): List<TextBlock> {
-        // Remove markdown code blocks if present
         val cleanResponse = response
             .replace("```json", "")
             .replace("```", "")
@@ -166,7 +221,6 @@ Respond ONLY with the JSON array, no additional text or markdown.
     }
 
     // ========== Data classes for Gemini API ==========
-
     @Serializable
     private data class GeminiRequest(
         val contents: List<GeminiContent>,
@@ -181,9 +235,7 @@ Respond ONLY with the JSON array, no additional text or markdown.
     )
 
     @Serializable
-    private data class GeminiPart(
-        val text: String
-    )
+    private data class GeminiPart(val text: String)
 
     @Serializable
     private data class GenerationConfig(
@@ -195,10 +247,7 @@ Respond ONLY with the JSON array, no additional text or markdown.
     )
 
     @Serializable
-    private data class SafetySetting(
-        val category: String,
-        val threshold: String
-    )
+    private data class SafetySetting(val category: String, val threshold: String)
 
     @Serializable
     private data class GeminiResponse(
@@ -215,21 +264,13 @@ Respond ONLY with the JSON array, no additional text or markdown.
     )
 
     @Serializable
-    private data class PromptFeedback(
-        val safetyRatings: List<SafetyRating>? = null
-    )
+    private data class PromptFeedback(val safetyRatings: List<SafetyRating>? = null)
 
     @Serializable
-    private data class SafetyRating(
-        val category: String? = null,
-        val probability: String? = null
-    )
+    private data class SafetyRating(val category: String? = null, val probability: String? = null)
 
     @Serializable
-    private data class TranslationItem(
-        val index: Int,
-        val translation: String
-    )
+    private data class TranslationItem(val index: Int, val translation: String)
 
     fun cleanup() {
         // No cleanup needed for OkHttp

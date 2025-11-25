@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import com.example.mangaocr_demon.data.PageEntity
 import com.example.mangaocr_demon.data.model.TextBlock
 import com.google.mlkit.nl.languageid.LanguageIdentification
 import com.google.mlkit.vision.common.InputImage
@@ -21,6 +22,41 @@ class OcrEngine(private val context: Context) {
     private val chineseRecognizer = TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
     private val japaneseRecognizer = TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
     private val languageIdentifier = LanguageIdentification.getClient()
+
+    /**
+     * ✅ THÊM: Recognize text từ PageEntity (cho ChapterReaderViewModel)
+     * @return Extracted text hoặc null nếu lỗi
+     */
+    suspend fun recognize(page: PageEntity): String? {
+        return try {
+            val imageUri = page.imageUri ?: return null
+
+            // Load bitmap
+            val bitmap = loadBitmap(imageUri) ?: return null
+            val image = InputImage.fromBitmap(bitmap, 0)
+
+            // Try recognizers in order: Chinese -> Japanese -> Latin
+            val chineseResult = chineseRecognizer.process(image).await()
+            if (chineseResult.text.isNotBlank()) {
+                bitmap.recycle()
+                return chineseResult.text
+            }
+
+            val japaneseResult = japaneseRecognizer.process(image).await()
+            if (japaneseResult.text.isNotBlank()) {
+                bitmap.recycle()
+                return japaneseResult.text
+            }
+
+            val latinResult = latinRecognizer.process(image).await()
+            bitmap.recycle()
+
+            latinResult.text.takeIf { it.isNotBlank() }
+        } catch (e: Exception) {
+            android.util.Log.e("OcrEngine", "Error recognizing text from page", e)
+            null
+        }
+    }
 
     /**
      * Process image and extract text blocks with positions
@@ -87,12 +123,66 @@ class OcrEngine(private val context: Context) {
             }
         }
 
+        // Process Japanese results
+        japaneseResult.textBlocks.forEach { block ->
+            val bounds = block.boundingBox ?: return@forEach
+            val text = block.text
+
+            // Check if this block already exists
+            if (allBlocks.none { it.originalText == text }) {
+                val language = "ja"
+                languageCounts[language] = (languageCounts[language] ?: 0) + 1
+
+                allBlocks.add(
+                    TextBlock(
+                        left = bounds.left.toFloat() / imageWidth,
+                        top = bounds.top.toFloat() / imageHeight,
+                        right = bounds.right.toFloat() / imageWidth,
+                        bottom = bounds.bottom.toFloat() / imageHeight,
+                        originalText = text,
+                        language = language,
+                        confidence = 0f
+                    )
+                )
+            }
+        }
+
         // Determine dominant language
         dominantLanguage = languageCounts.maxByOrNull { it.value }?.key ?: "unknown"
 
         bitmap.recycle()
 
         return Pair(allBlocks, dominantLanguage)
+    }
+
+    /**
+     * ✅ THÊM: Recognize từ URI (helper method)
+     */
+    suspend fun recognizeFromUri(imageUri: String): String? {
+        return try {
+            val bitmap = loadBitmap(imageUri) ?: return null
+            val image = InputImage.fromBitmap(bitmap, 0)
+
+            val chineseResult = chineseRecognizer.process(image).await()
+            if (chineseResult.text.isNotBlank()) {
+                bitmap.recycle()
+                return chineseResult.text
+            }
+
+            val japaneseResult = japaneseRecognizer.process(image).await()
+            if (japaneseResult.text.isNotBlank()) {
+                bitmap.recycle()
+                return japaneseResult.text
+            }
+
+            val latinResult = latinRecognizer.process(image).await()
+            bitmap.recycle()
+
+            latinResult.text.takeIf { it.isNotBlank() }
+        } catch (e: Exception) {
+            android.util.Log.e("OcrEngine", "Error recognizing text from URI", e)
+            null
+        }
     }
 
     private suspend fun detectLanguage(text: String): String = suspendCoroutine { continuation ->

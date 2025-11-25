@@ -10,7 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class HistoryViewModel(application: Application) : AndroidViewModel(application) {
-    private val dao = AppDatabase.Companion.getDatabase(application).historyDao()
+    private val dao = AppDatabase.getDatabase(application).historyDao()
 
     val allHistory: LiveData<List<HistoryEntity>> = dao.getAllHistory()
 
@@ -19,9 +19,11 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             dao.insert(history)
         }
     }
+
+    // ✅ FIXED: clearAll() -> clearAllHistory()
     fun clearHistory() {
         viewModelScope.launch(Dispatchers.IO) {
-            dao.clearAll()
+            dao.clearAllHistory()
         }
     }
 }

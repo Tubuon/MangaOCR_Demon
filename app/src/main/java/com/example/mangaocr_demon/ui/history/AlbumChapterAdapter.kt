@@ -7,6 +7,8 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.example.mangaocr_demon.data.ChapterEntity
 import com.example.mangaocr_demon.databinding.ItemChapterBinding
+import java.text.SimpleDateFormat
+import java.util.*
 
 class AlbumChapterAdapter(
     private val onChapterClick: (ChapterEntity) -> Unit,
@@ -27,21 +29,38 @@ class AlbumChapterAdapter(
         private val binding: ItemChapterBinding
     ) : RecyclerView.ViewHolder(binding.root) {
 
-        fun bind(chapter: ChapterEntity) {
-            // Hiển thị title nếu có, nếu không thì hiển thị "No title"
-            binding.tvChapterTitle.text = chapter.title ?: "No title"
+        private var currentChapter: ChapterEntity? = null
 
-            // Hiển thị chapter number
-            binding.tvChapterNumber.text = "Chapter ${chapter.number}"
-
+        init {
             binding.root.setOnClickListener {
-                onChapterClick(chapter)
+                currentChapter?.let { onChapterClick(it) }
             }
 
             binding.root.setOnLongClickListener {
-                onChapterLongClick(chapter)
-                true
+                currentChapter?.let {
+                    onChapterLongClick(it)
+                    true
+                } ?: false
             }
+        }
+
+        fun bind(chapter: ChapterEntity) {
+            currentChapter = chapter
+
+            binding.tvChapterNumber.text = "Chapter ${chapter.number}"
+            binding.tvChapterTitle.text = chapter.title ?: "No title"
+
+            // ✅ FIXED: Dùng createdAt thay vì created_at
+            try {
+                binding.tvChapterDate.text = formatDate(chapter.createdAt)
+            } catch (e: Exception) {
+                // View doesn't exist in layout, skip
+            }
+        }
+
+        private fun formatDate(timestamp: Long): String {
+            val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+            return sdf.format(Date(timestamp))
         }
     }
 

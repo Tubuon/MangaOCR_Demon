@@ -1,3 +1,4 @@
+// File: data/PageEntity.kt
 package com.example.mangaocr_demon.data
 
 import androidx.room.ColumnInfo
@@ -24,18 +25,17 @@ data class PageEntity(
     @ColumnInfo(name = "page_index") val pageIndex: Int,
     @ColumnInfo(name = "image_uri") val imageUri: String? = null,
 
-    // ⭐ DEPRECATED - Giữ để tương thích, nhưng dùng ocrDataJson
+    // PDF fields
+    @ColumnInfo(name = "page_type") val pageType: String = "IMAGE", // "IMAGE" hoặc "PDF"
+    @ColumnInfo(name = "pdf_uri") val pdfUri: String? = null,
+    @ColumnInfo(name = "pdf_page_number") val pdfPageNumber: Int? = null,
+
+    // OCR fields
     @ColumnInfo(name = "ocr_text") val ocrText: String? = null,
     @ColumnInfo(name = "translated_text") val translatedText: String? = null,
-
-    // ⭐ MỚI - Lưu toàn bộ text blocks với vị trí
     @ColumnInfo(name = "ocr_data_json") val ocrDataJson: String? = null,
     @ColumnInfo(name = "is_ocr_processed") val isOcrProcessed: Boolean = false,
     @ColumnInfo(name = "ocr_language") val ocrLanguage: String? = null, // "zh", "en", "ja"
-    @ColumnInfo(name = "last_ocr_date") val lastOcrDate: Long? = null,
 
-    @ColumnInfo(name = "pdf_uri") val pdfUri: String? = null,
-    @ColumnInfo(name = "pdf_page_number") val pdfPageNumber: Int? = null,
-    @ColumnInfo(name = "page_type") val pageType: String = "IMAGE",
-    @ColumnInfo(name = "added_at") val addedAt: Long = System.currentTimeMillis()
+    @ColumnInfo(name = "last_processed_at") val lastProcessedAt: Long = 0
 )

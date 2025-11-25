@@ -2,140 +2,274 @@ package com.example.mangaocr_demon
 
 import android.app.Activity
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.view.*
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.activity.result.contract.ActivityResultContracts
 import com.example.mangaocr_demon.data.MangaEntity
 import com.example.mangaocr_demon.databinding.FragmentHomeBinding
 import com.example.mangaocr_demon.ui.manga.MangaAdapter
 import com.example.mangaocr_demon.ui.viewmodel.HomeViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class HomeFragment : Fragment() {
+
     private var _binding: FragmentHomeBinding? = null
     private val binding get() = _binding!!
-    private lateinit var viewModel: HomeViewModel
+
+    private val viewModel: HomeViewModel by lazy {
+        ViewModelProvider(requireActivity())[HomeViewModel::class.java]
+    }
+
     private lateinit var adapter: MangaAdapter
-
     private var isFabMenuOpen = false
+    private var isProcessingImages = false
+    private var isPdfProcessing = false
 
-    // Launcher cho PDF
+    companion object {
+        private const val MIN_IMAGES = 1
+        private const val MAX_IMAGES = 20
+        private const val KEY_FAB_MENU_OPEN = "fab_menu_open"
+        private const val KEY_PROCESSING = "processing_images"
+        private const val TAG = "HomeFragment"
+    }
+
+    // =================== LAUNCHERS ===================
+
+    // PDF Picker Launcher
     private val pdfPickerLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            result.data?.data?.let { pdfUri ->
+        android.util.Log.d(TAG, "PDF picker result: ${result.resultCode}")
+
+        if (isPdfProcessing || !isAdded || _binding == null) {
+            android.util.Log.w(TAG, "Skipping PDF - already processing or fragment detached")
+            return@registerForActivityResult
+        }
+
+        if (result.resultCode != Activity.RESULT_OK) {
+            isPdfProcessing = false
+            return@registerForActivityResult
+        }
+
+        result.data?.data?.let { pdfUri ->
+            isPdfProcessing = true
+            android.util.Log.d(TAG, "Processing PDF: $pdfUri")
+
+            viewLifecycleOwner.lifecycleScope.launch {
                 try {
-                    // Lấy quyền truy cập lâu dài
-                    requireContext().contentResolver.takePersistableUriPermission(
-                        pdfUri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    )
+                    if (!isAdded || _binding == null) return@launch
+
+                    showProgressBar(true, "Đang xử lý PDF...")
+
+                    withContext(Dispatchers.IO) {
+                        try {
+                            requireContext().contentResolver.takePersistableUriPermission(
+                                pdfUri,
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            )
+                        } catch (e: Exception) {
+                            android.util.Log.e(TAG, "Failed to take PDF permission", e)
+                        }
+                    }
 
                     val manga = MangaEntity(
-                        title = "Manga mới (PDF)",
-                        description = "Nhập từ file PDF"
+                        title = "Manga mới (PDF) - ${System.currentTimeMillis()}",
+                        description = "Nhập từ file PDF",
+                        createdAt = System.currentTimeMillis()
                     )
-                    viewModel.addMangaFromPdf(manga, pdfUri.toString())
-                    Toast.makeText(context, "Đã thêm PDF thành công!", Toast.LENGTH_SHORT).show()
+
+                    withContext(Dispatchers.IO) {
+                        viewModel.addMangaFromPdf(manga, pdfUri.toString())
+                    }
+
+                    if (isAdded && context != null) {
+                        showProgressBar(false)
+                        showToast("✅ Đã thêm truyện từ PDF!")
+                    }
+
                 } catch (e: Exception) {
-                    e.printStackTrace()
-                    Toast.makeText(context, "Lỗi: ${e.message}", Toast.LENGTH_SHORT).show()
+                    android.util.Log.e(TAG, "PDF processing error", e)
+                    if (isAdded && context != null) {
+                        showProgressBar(false)
+                        showToast("❌ Lỗi: ${e.message}")
+                    }
+                } finally {
+                    isPdfProcessing = false
                 }
             }
+        } ?: run {
+            isPdfProcessing = false
         }
     }
 
-    // Launcher cho Images - ĐÃ THÊM GIỚI HẠN
+    // Image Picker Launcher
     private val imagePickerLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            result.data?.let { intent ->
+        android.util.Log.d(TAG, "Image picker result: ${result.resultCode}")
+
+        if (isProcessingImages || !isAdded || _binding == null) {
+            android.util.Log.w(TAG, "Skipping images - already processing or fragment detached")
+            return@registerForActivityResult
+        }
+
+        if (result.resultCode != Activity.RESULT_OK) {
+            isProcessingImages = false
+            return@registerForActivityResult
+        }
+
+        result.data?.let { intent ->
+            isProcessingImages = true
+            android.util.Log.d(TAG, "Processing images")
+
+            viewLifecycleOwner.lifecycleScope.launch {
                 try {
+                    if (!isAdded || _binding == null) return@launch
+
+                    showProgressBar(true, "Đang xử lý ảnh...")
+
                     val uris = mutableListOf<String>()
 
-                    // Xử lý nhiều ảnh
-                    val clipData = intent.clipData
-                    if (clipData != null) {
-                        for (i in 0 until clipData.itemCount) {
-                            val uri = clipData.getItemAt(i).uri
-                            // Lấy quyền cho từng URI
-                            requireContext().contentResolver.takePersistableUriPermission(
-                                uri,
-                                Intent.FLAG_GRANT_READ_URI_PERMISSION
-                            )
-                            uris.add(uri.toString())
-                        }
-                    } else {
-                        // Chỉ 1 ảnh
-                        intent.data?.let { uri ->
-                            requireContext().contentResolver.takePersistableUriPermission(
-                                uri,
-                                Intent.FLAG_GRANT_READ_URI_PERMISSION
-                            )
-                            uris.add(uri.toString())
+                    withContext(Dispatchers.IO) {
+                        val clipData = intent.clipData
+                        if (clipData != null) {
+                            // Multiple images
+                            for (i in 0 until clipData.itemCount) {
+                                val uri = clipData.getItemAt(i).uri
+                                try {
+                                    requireContext().contentResolver.takePersistableUriPermission(
+                                        uri,
+                                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                    )
+                                    uris.add(uri.toString())
+                                } catch (e: SecurityException) {
+                                    android.util.Log.e(TAG, "Cannot take permission for URI: $uri", e)
+                                }
+                            }
+                        } else {
+                            // Single image
+                            intent.data?.let { uri ->
+                                try {
+                                    requireContext().contentResolver.takePersistableUriPermission(
+                                        uri,
+                                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                    )
+                                    uris.add(uri.toString())
+                                } catch (e: SecurityException) {
+                                    android.util.Log.e(TAG, "Cannot take permission for URI: $uri", e)
+                                }
+                            }
                         }
                     }
 
-                    // ✅ VALIDATE SỐ LƯỢNG ẢNH
                     when {
                         uris.isEmpty() -> {
-                            Toast.makeText(
-                                context,
-                                "Bạn chưa chọn ảnh nào",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            showProgressBar(false)
+                            showToast("⚠️ Bạn chưa chọn ảnh nào")
                         }
                         uris.size < MIN_IMAGES -> {
-                            Toast.makeText(
-                                context,
-                                "Vui lòng chọn ít nhất $MIN_IMAGES ảnh",
-                                Toast.LENGTH_LONG
-                            ).show()
+                            showProgressBar(false)
+                            showToast("⚠️ Vui lòng chọn ít nhất $MIN_IMAGES ảnh")
                         }
                         uris.size > MAX_IMAGES -> {
-                            Toast.makeText(
-                                context,
-                                "Chỉ được chọn tối đa $MAX_IMAGES ảnh. Bạn đã chọn ${uris.size} ảnh.",
-                                Toast.LENGTH_LONG
-                            ).show()
+                            showProgressBar(false)
+                            showToast("⚠️ Chỉ được chọn tối đa $MAX_IMAGES ảnh. Bạn đã chọn ${uris.size} ảnh.")
                         }
                         else -> {
-                            // ✅ OK - Số lượng hợp lệ
                             val manga = MangaEntity(
-                                title = "Manga mới (ảnh)",
-                                description = "Nhập từ ${uris.size} ảnh"
+                                title = "Manga mới (ảnh) - ${System.currentTimeMillis()}",
+                                description = "Nhập từ ${uris.size} ảnh",
+                                createdAt = System.currentTimeMillis()
                             )
-                            viewModel.addMangaWithImages(manga, uris)
-                            Toast.makeText(
-                                context,
-                                "Đã thêm ${uris.size} ảnh thành công!",
-                                Toast.LENGTH_SHORT
-                            ).show()
+
+                            withContext(Dispatchers.IO) {
+                                viewModel.addMangaWithImages(manga, uris)
+                            }
+
+                            if (isAdded && context != null) {
+                                showProgressBar(false)
+                                showToast("✅ Đã thêm ${uris.size} ảnh thành công!")
+                            }
                         }
                     }
+
                 } catch (e: Exception) {
-                    e.printStackTrace()
-                    Toast.makeText(context, "Lỗi: ${e.message}", Toast.LENGTH_SHORT).show()
+                    android.util.Log.e(TAG, "Image processing error", e)
+                    if (isAdded && context != null) {
+                        showProgressBar(false)
+                        showToast("❌ Lỗi: ${e.message}")
+                    }
+                } finally {
+                    isProcessingImages = false
                 }
             }
+        } ?: run {
+            isProcessingImages = false
+        }
+    }
+
+    // =================== LIFECYCLE ===================
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        savedInstanceState?.let {
+            isFabMenuOpen = it.getBoolean(KEY_FAB_MENU_OPEN, false)
+            isProcessingImages = it.getBoolean(KEY_PROCESSING, false)
         }
     }
 
     override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?,
+        inflater: LayoutInflater,
+        container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
         _binding = FragmentHomeBinding.inflate(inflater, container, false)
-        viewModel = ViewModelProvider(requireActivity())[HomeViewModel::class.java]
 
-        // Setup RecyclerView
+        setupRecyclerView()
+        setupFabMenu()
+        observeViewModel()
+
+        if (isFabMenuOpen) {
+            openFabMenu()
+        }
+
+        return binding.root
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(KEY_FAB_MENU_OPEN, isFabMenuOpen)
+        outState.putBoolean(KEY_PROCESSING, isProcessingImages)
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        isPdfProcessing = false
+        isProcessingImages = false
+        _binding = null
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (isFabMenuOpen) {
+            closeFabMenu()
+        }
+    }
+
+    // =================== UI SETUP ===================
+
+    private fun setupRecyclerView() {
         adapter = MangaAdapter { manga ->
+            if (!isAdded) return@MangaAdapter
+
             val bundle = Bundle().apply {
                 putLong("mangaId", manga.id)
                 putString("mangaTitle", manga.title)
@@ -143,29 +277,25 @@ class HomeFragment : Fragment() {
             val fragment = MangaDetailFragment().apply {
                 arguments = bundle
             }
-            parentFragmentManager.beginTransaction()
-                .replace(R.id.fragment_container, fragment)
-                .addToBackStack(null)
-                .commit()
+
+            try {
+                parentFragmentManager.beginTransaction()
+                    .replace(android.R.id.content, fragment)
+                    .addToBackStack(null)
+                    .commit()
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "Error navigating to detail", e)
+            }
         }
 
-        binding.recyclerViewManga.layoutManager = LinearLayoutManager(requireContext())
-        binding.recyclerViewManga.adapter = adapter
-
-        // Quan sát danh sách manga
-        viewModel.mangaList.observe(viewLifecycleOwner) { list ->
-            adapter.submitList(list)
-            updateEmptyState(list.isEmpty())
-            binding.tvMangaCount.text = "${list.size} truyện"
+        binding.recyclerViewManga.apply {
+            layoutManager = LinearLayoutManager(requireContext())
+            adapter = this@HomeFragment.adapter
         }
-
-        setupFabMenu()
-
-        return binding.root
     }
 
     private fun setupFabMenu() {
-        // Click nút FAB chính để mở/đóng menu
+        // Main FAB click
         binding.fabAdd.setOnClickListener {
             if (isFabMenuOpen) {
                 closeFabMenu()
@@ -174,60 +304,63 @@ class HomeFragment : Fragment() {
             }
         }
 
-        // Click overlay để đóng menu
+        // Scrim overlay click
         binding.scrimOverlay.setOnClickListener {
             closeFabMenu()
         }
 
-        // Click nút thêm từ PDF
+        // PDF button click
         binding.btnAddPdf.setOnClickListener {
             closeFabMenu()
             openPdfPicker()
         }
 
-        // Click nút thêm từ ảnh
+        // Images button click
         binding.btnAddImages.setOnClickListener {
             closeFabMenu()
-            // ✅ HIỂN THỊ THÔNG BÁO TRƯỚC KHI CHỌN
             showImagePickerInfo()
         }
     }
 
-    // ✅ THÊM HÀM HIỂN THỊ THÔNG BÁO
-    private fun showImagePickerInfo() {
-        Toast.makeText(
-            context,
-            "Vui lòng chọn từ $MIN_IMAGES đến $MAX_IMAGES ảnh",
-            Toast.LENGTH_SHORT
-        ).show()
-        openImagePicker()
+    private fun observeViewModel() {
+        viewModel.mangaList.observe(viewLifecycleOwner) { list ->
+            if (!isAdded || _binding == null) return@observe
+
+            adapter.submitList(list)
+            updateEmptyState(list.isEmpty())
+            binding.tvMangaCount.text = "${list.size} truyện"
+        }
     }
+
+    // =================== FAB MENU ===================
 
     private fun openFabMenu() {
         isFabMenuOpen = true
         binding.fabMenuContainer.visibility = View.VISIBLE
         binding.scrimOverlay.visibility = View.VISIBLE
-
-        // Animation xoay nút FAB
-        binding.fabAdd.animate()
-            .rotation(45f)
-            .setDuration(200)
-            .start()
+        binding.fabAdd.animate().rotation(45f).setDuration(200).start()
     }
 
     private fun closeFabMenu() {
         isFabMenuOpen = false
         binding.fabMenuContainer.visibility = View.GONE
         binding.scrimOverlay.visibility = View.GONE
+        binding.fabAdd.animate().rotation(0f).setDuration(200).start()
+    }
 
-        // Animation xoay về nút FAB
-        binding.fabAdd.animate()
-            .rotation(0f)
-            .setDuration(200)
-            .start()
+    // =================== PICKERS ===================
+
+    private fun showImagePickerInfo() {
+        showToast("Vui lòng chọn từ $MIN_IMAGES đến $MAX_IMAGES ảnh")
+        openImagePicker()
     }
 
     private fun openPdfPicker() {
+        if (isPdfProcessing) {
+            showToast("⏳ Đang xử lý PDF trước đó, vui lòng đợi...")
+            return
+        }
+
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "application/pdf"
@@ -238,6 +371,11 @@ class HomeFragment : Fragment() {
     }
 
     private fun openImagePicker() {
+        if (isProcessingImages) {
+            showToast("⏳ Đang xử lý ảnh trước đó, vui lòng đợi...")
+            return
+        }
+
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "image/*"
@@ -248,7 +386,11 @@ class HomeFragment : Fragment() {
         imagePickerLauncher.launch(intent)
     }
 
+    // =================== HELPERS ===================
+
     private fun updateEmptyState(isEmpty: Boolean) {
+        if (_binding == null) return
+
         if (isEmpty) {
             binding.emptyState.visibility = View.VISIBLE
             binding.recyclerViewManga.visibility = View.GONE
@@ -258,13 +400,30 @@ class HomeFragment : Fragment() {
         }
     }
 
-    override fun onDestroyView() {
-        super.onDestroyView()
-        _binding = null
+    private fun showProgressBar(show: Boolean, message: String = "") {
+        if (_binding == null) return
+
+        try {
+            binding.progressBar.visibility = if (show) View.VISIBLE else View.GONE
+
+            binding.tvProgressMessage?.apply {
+                if (show && message.isNotEmpty()) {
+                    visibility = View.VISIBLE
+                    text = message
+                } else {
+                    visibility = View.GONE
+                }
+            }
+
+            binding.fabAdd.isEnabled = !show
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Error showing progress", e)
+        }
     }
 
-    companion object {
-        private const val MIN_IMAGES = 1
-        private const val MAX_IMAGES = 20
+    private fun showToast(message: String) {
+        if (isAdded && context != null) {
+            Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+        }
     }
 }

@@ -4,27 +4,29 @@ package com.example.mangaocr_demon.data.model
 import android.graphics.RectF
 import kotlinx.serialization.Serializable
 
+/**
+ * Represents a text block detected by OCR
+ * Coordinates are normalized (0.0 to 1.0) relative to image dimensions
+ */
 @Serializable
 data class TextBlock(
-    val id: String = java.util.UUID.randomUUID().toString(),
-
-    // Vị trí trên ảnh (normalized 0-1)
+    // Normalized coordinates (0.0 - 1.0)
     val left: Float,
     val top: Float,
     val right: Float,
     val bottom: Float,
 
+    // Text content
     val originalText: String,
     val translatedText: String = "",
-    val language: String = "unknown", // "zh", "en", "ja"
-    val confidence: Float = 0f,
 
-    // User customization
-    val isManuallyEdited: Boolean = false,
-    val customFontSize: Float? = null,
-    val customBackgroundColor: Int? = null
+    // Metadata
+    val language: String = "unknown",
+    val confidence: Float = 0f
 ) {
-    // Helper function to get RectF
+    /**
+     * Get pixel bounds from normalized coordinates
+     */
     fun getBounds(imageWidth: Int, imageHeight: Int): RectF {
         return RectF(
             left * imageWidth,
@@ -33,12 +35,23 @@ data class TextBlock(
             bottom * imageHeight
         )
     }
+
+    /**
+     * Create a copy with translation
+     */
+    fun copy(translatedText: String): TextBlock {
+        return copy(translatedText = translatedText)
+    }
 }
 
+/**
+ * Container for OCR data with image metadata
+ */
 @Serializable
 data class OcrData(
     val textBlocks: List<TextBlock>,
     val imageWidth: Int,
     val imageHeight: Int,
-    val processedAt: Long = System.currentTimeMillis()
+    val processedAt: Long = System.currentTimeMillis(),
+    val dominantLanguage: String = "unknown"
 )

@@ -13,22 +13,23 @@ import androidx.fragment.app.Fragment
 import com.bumptech.glide.Glide
 import com.example.mangaocr_demon.databinding.FragmentSettingsBinding
 import com.example.mangaocr_demon.ui.GoogleAuthManager
+import com.example.mangaocr_demon.ui.GoogleDriveSyncManager
 import com.example.mangaocr_demon.ui.SettingsManager
+import com.example.mangaocr_demon.ui.dialogs.BackupSelectionDialog
 
-class SettingsFragment : Fragment() {
+class SettingsFragment : Fragment(), ThemeAware {
 
     private var _binding: FragmentSettingsBinding? = null
     private val binding get() = _binding!!
 
     private lateinit var settingsManager: SettingsManager
     private lateinit var googleAuthManager: GoogleAuthManager
+    private lateinit var syncManager: GoogleDriveSyncManager
 
-    // Launcher cho LoginActivity
     private val loginLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            // Đăng nhập thành công, cập nhật UI
             updateAccountUI()
             showToast("Đăng nhập thành công!")
         }
@@ -47,6 +48,9 @@ class SettingsFragment : Fragment() {
 
         settingsManager = SettingsManager(requireContext())
         googleAuthManager = GoogleAuthManager(requireContext())
+        syncManager = GoogleDriveSyncManager(requireContext())
+
+        applyTheme()
 
         setupThemeSettings()
         setupReadingModeSettings()
@@ -70,6 +74,10 @@ class SettingsFragment : Fragment() {
                 else -> SettingsManager.THEME_DARK
             }
             settingsManager.theme = theme
+
+            applyTheme()
+            (activity as? MainActivity)?.refreshTheme()
+
             showToast("Đã thay đổi theme")
         }
     }
@@ -119,16 +127,13 @@ class SettingsFragment : Fragment() {
     }
 
     private fun setupGoogleDriveSync() {
-        // Nút đăng nhập → Mở LoginActivity
         binding.btnSignIn.setOnClickListener {
             val intent = Intent(requireContext(), LoginActivity::class.java)
             loginLauncher.launch(intent)
         }
 
-        // Nút đăng xuất - FIX: Check isAdded trước khi show toast
         binding.btnSignOut.setOnClickListener {
             googleAuthManager.signOut {
-                // Check Fragment vẫn còn attached
                 if (isAdded && !isDetached && !isRemoving) {
                     clearUserPreferences()
                     updateAccountUI()
@@ -137,7 +142,6 @@ class SettingsFragment : Fragment() {
             }
         }
 
-        // Nút xem chi tiết tài khoản
         binding.btnViewAccount.setOnClickListener {
             if (isAdded) {
                 parentFragmentManager.beginTransaction()
@@ -147,28 +151,52 @@ class SettingsFragment : Fragment() {
             }
         }
 
-        // Nút backup
+        // ⭐ CẬP NHẬT - Mở BackupSelectionDialog
         binding.btnBackupToDrive.setOnClickListener {
-            showToast("Đang sao lưu lên Drive...")
-            // TODO: Implement backup
+            val dialog = BackupSelectionDialog.newBackupDialog()
+            dialog.show(childFragmentManager, "backup_dialog")
         }
 
-        // Nút restore
         binding.btnRestoreFromDrive.setOnClickListener {
-            showToast("Đang khôi phục từ Drive...")
-            // TODO: Implement restore
+            val dialog = BackupSelectionDialog.newRestoreDialog()
+            dialog.show(childFragmentManager, "restore_dialog")
         }
     }
 
+    override fun onThemeChanged() {
+        applyTheme()
+    }
+
+    private fun applyTheme() {
+        if (_binding == null) return
+
+        val bgColor = settingsManager.getThemeBackgroundColor()
+        val textColor = settingsManager.getThemeTextColor()
+
+        binding.root.setBackgroundColor(bgColor)
+
+        binding.tvTitle.setTextColor(textColor)
+        binding.tvUserName.setTextColor(textColor)
+        binding.tvUserEmail.setTextColor(textColor)
+        binding.tvLastSync.setTextColor(textColor)
+
+        binding.rbThemeLight.setTextColor(textColor)
+        binding.rbThemeDark.setTextColor(textColor)
+        binding.rbThemeSepia.setTextColor(textColor)
+        binding.rbModeHorizontal.setTextColor(textColor)
+        binding.rbModeVertical.setTextColor(textColor)
+        binding.rbModeWebtoon.setTextColor(textColor)
+
+        binding.switchKeepScreenOn.setTextColor(textColor)
+    }
+
     private fun updateAccountUI() {
-        // Check binding vẫn còn tồn tại
         if (_binding == null) return
 
         val prefs = requireContext().getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
         val isLoggedIn = prefs.getBoolean("is_logged_in", false)
 
         if (isLoggedIn) {
-            // Đã đăng nhập
             binding.btnSignIn.visibility = View.GONE
             binding.layoutUserInfo.visibility = View.VISIBLE
             binding.layoutSyncButtons.visibility = View.VISIBLE
@@ -182,6 +210,9 @@ class SettingsFragment : Fragment() {
             binding.tvUserName.text = userName
             binding.tvUserEmail.text = userEmail
 
+            // ⭐ CẬP NHẬT - Hiển thị thời gian sync cuối
+            binding.tvLastSync.text = "Lần cuối: ${syncManager.getLastSyncTime()}"
+
             photoUrl?.let {
                 if (isAdded) {
                     Glide.with(this)
@@ -190,15 +221,20 @@ class SettingsFragment : Fragment() {
                         .into(binding.ivUserAvatar)
                 }
             }
-
-            binding.tvLastSync.text = "Chưa đồng bộ"
         } else {
-            // Chưa đăng nhập
             binding.btnSignIn.visibility = View.VISIBLE
             binding.layoutUserInfo.visibility = View.GONE
             binding.layoutSyncButtons.visibility = View.GONE
             binding.btnViewAccount.visibility = View.GONE
             binding.tvLastSync.visibility = View.GONE
+        }
+    }
+
+    // ⭐ THÊM MỚI - Refresh UI khi quay lại
+    override fun onResume() {
+        super.onResume()
+        if (_binding != null) {
+            binding.tvLastSync.text = "Lần cuối: ${syncManager.getLastSyncTime()}"
         }
     }
 
@@ -208,7 +244,6 @@ class SettingsFragment : Fragment() {
     }
 
     private fun showToast(message: String) {
-        // FIX: Check context vẫn còn tồn tại
         if (isAdded && context != null) {
             Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
         }
