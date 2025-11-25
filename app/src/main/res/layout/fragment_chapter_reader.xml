@@ -109,12 +109,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginBottom="12dp"
-            android:src="@drawable/ic_image_placeholder"
+            android:src="@drawable/ic_gemini"
             app:tint="@android:color/white"
             app:fabSize="mini"
             android:contentDescription="Toggle text overlay" />
-
-        <!-- Debug mode toggle -->
 
     </LinearLayout>
 
