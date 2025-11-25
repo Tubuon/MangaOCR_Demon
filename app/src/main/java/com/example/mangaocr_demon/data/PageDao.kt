@@ -46,7 +46,7 @@ interface PageDao {
         timestamp: Long
     )
 
-    // ⭐ Get page by ID (synchronous for OCR processing)
+
     @Query("SELECT * FROM page WHERE id = :pageId")
     suspend fun getPageByIdSync(pageId: Long): PageEntity?
 

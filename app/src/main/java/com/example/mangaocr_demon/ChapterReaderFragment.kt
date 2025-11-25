@@ -43,8 +43,8 @@ class ChapterReaderFragment : Fragment() {
         super.onCreate(savedInstanceState)
         arguments?.let {
             chapterId = it.getLong("chapterId", -1L)
-            mangaTitle = it.getString("mangaTitle") // ⭐ NEW
-            chapterNumber = it.getString("chapterNumber") // ⭐ NEW
+            mangaTitle = it.getString("mangaTitle")
+            chapterNumber = it.getString("chapterNumber")
         }
     }
 
@@ -129,7 +129,6 @@ class ChapterReaderFragment : Fragment() {
         binding.recyclerViewPages.visibility = View.VISIBLE
 
         pageVerticalAdapter = PageVerticalAdapter { page ->
-            // TODO: Handle OCR/translate on long click
         }
 
         binding.recyclerViewPages.apply {
@@ -206,17 +205,14 @@ class ChapterReaderFragment : Fragment() {
     private fun setupOcrViewModel() {
         ocrViewModel = ViewModelProvider(this)[OcrViewModel::class.java]
 
-        // OCR progress
         ocrViewModel.ocrProgress.observe(viewLifecycleOwner) { progress ->
             handleOcrProgress(progress)
         }
 
-        // ⭐ Translation progress
         ocrViewModel.translationProgress.observe(viewLifecycleOwner) { progress ->
             handleTranslationProgress(progress)
         }
 
-        // Errors
         ocrViewModel.ocrError.observe(viewLifecycleOwner) { error ->
             error?.let {
                 showError(it)
@@ -225,7 +221,6 @@ class ChapterReaderFragment : Fragment() {
         }
     }
 
-    // ⭐ NEW: Handle translation progress
     private fun handleTranslationProgress(progress: OcrViewModel.TranslationProgress) {
         when (progress) {
             is OcrViewModel.TranslationProgress.Idle -> {
@@ -245,8 +240,6 @@ class ChapterReaderFragment : Fragment() {
                     "Translated ${progress.translatedCount} text blocks",
                     Snackbar.LENGTH_LONG
                 ).show()
-
-                // Refresh page to show translation
                 forceReloadPages()
             }
 
@@ -256,9 +249,6 @@ class ChapterReaderFragment : Fragment() {
             }
         }
     }
-
-
-
 
     private fun setupOcrControls() {
         // FAB Menu toggle
@@ -290,7 +280,6 @@ class ChapterReaderFragment : Fragment() {
         }
     }
 
-    // ⭐ NEW: Translate current page
     private fun translateCurrentPage() {
         val currentPosition = when (settingsManager.readingMode) {
             SettingsManager.MODE_VERTICAL, SettingsManager.MODE_WEBTOON -> {
@@ -308,17 +297,11 @@ class ChapterReaderFragment : Fragment() {
                 return
             }
 
-            // ⭐ Pass manga info to ViewModel
             ocrViewModel.translatePage(page, mangaTitle, chapterNumber)
         } else {
             showError("No page selected")
         }
     }
-
-
-
-
-
 
     private fun clearOcrForCurrentPage() {
         val currentPosition = when (settingsManager.readingMode) {
@@ -353,7 +336,6 @@ class ChapterReaderFragment : Fragment() {
                         Snackbar.LENGTH_SHORT
                     ).show()
 
-                    // Refresh page
                     refreshCurrentPage()
 
                 } catch (e: Exception) {
@@ -363,10 +345,6 @@ class ChapterReaderFragment : Fragment() {
             }
         }
     }
-
-
-
-
 
     private fun toggleFabMenu() {
         isFabMenuExpanded = !isFabMenuExpanded
@@ -391,8 +369,6 @@ class ChapterReaderFragment : Fragment() {
 
         if (currentPosition >= 0 && currentPosition < currentPages.size) {
             val page = currentPages[currentPosition]
-
-            // ⭐ ALLOW RE-SCAN
             if (page.isOcrProcessed) {
                 android.util.Log.d("ChapterReaderFragment", "🔄 Re-scanning already processed page")
             }
@@ -404,18 +380,13 @@ class ChapterReaderFragment : Fragment() {
     }
 
     private fun toggleOverlayForCurrentPage() {
-        // This will be handled by the adapter/view
-        // You can implement a callback to PageAdapter to toggle overlay
         Snackbar.make(binding.root, "Overlay toggled", Snackbar.LENGTH_SHORT).show()
     }
 
-    // ⭐ NEW: Toggle debug mode
     private fun toggleDebugMode() {
-        // This will show bounding boxes around text blocks
         Snackbar.make(binding.root, "Debug mode toggled", Snackbar.LENGTH_SHORT).show()
     }
 
-    // ⭐ NEW: Process OCR for a page
     private fun processOcrForPage(page: PageEntity) {
         if (page.imageUri == null) {
             showError("No image found")
@@ -459,7 +430,6 @@ class ChapterReaderFragment : Fragment() {
                     }
                     .show()
 
-                // ⭐ CRITICAL: Force reload from database
                 android.util.Log.d("ChapterReaderFragment", "🔄 Triggering force refresh...")
                 forceReloadPages()
             }
@@ -478,7 +448,6 @@ class ChapterReaderFragment : Fragment() {
             try {
                 val db = AppDatabase.getDatabase(requireContext())
 
-                // ⭐ Get fresh data from database
                 val freshPages = db.pageDao().getPagesByChapterIdSync(chapterId)
 
                 android.util.Log.d("ChapterReaderFragment", "📄 Loaded ${freshPages.size} fresh pages")
@@ -490,7 +459,6 @@ class ChapterReaderFragment : Fragment() {
                                 "ocrDataJson length=${page.ocrDataJson?.length ?: 0}")
                 }
 
-                // ⭐ Update adapter with fresh data
                 currentPages = freshPages
 
                 when (settingsManager.readingMode) {
@@ -518,7 +486,6 @@ class ChapterReaderFragment : Fragment() {
     }
 
     private fun refreshCurrentPage() {
-        // Trigger a refresh of the LiveData
         viewModel.pages.value?.let { pages ->
             when (settingsManager.readingMode) {
                 SettingsManager.MODE_VERTICAL, SettingsManager.MODE_WEBTOON -> {

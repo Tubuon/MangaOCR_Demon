@@ -11,20 +11,20 @@ import androidx.room.Index
     foreignKeys = [
         ForeignKey(
             entity = AlbumEntity::class,
-            // ✅ ĐẢM BẢO ĐÃ DÙNG arrayOf(...)
+
             parentColumns = arrayOf("id"),
             childColumns = arrayOf("album_id"),
             onDelete = ForeignKey.Companion.CASCADE
         ),
         ForeignKey(
             entity = ChapterEntity::class,
-            // ✅ ĐẢM BẢO ĐÃ DÙNG arrayOf(...)
+
             parentColumns = arrayOf("id"),
             childColumns = arrayOf("chapter_id"),
             onDelete = ForeignKey.Companion.CASCADE
         )
     ],
-    // ✅ KIỂM TRA CẢ Ở ĐÂY NỮA, CŨNG PHẢI DÙNG arrayOf(...) NẾU CÓ NHIỀU CỘT
+
     indices = [
         Index(value = arrayOf("album_id")),
         Index(value = arrayOf("chapter_id"))
