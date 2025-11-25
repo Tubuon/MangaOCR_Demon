@@ -1,4 +1,3 @@
-// File: data/model/TextBlock.kt
 package com.example.mangaocr_demon.data.model
 
 import android.graphics.RectF
