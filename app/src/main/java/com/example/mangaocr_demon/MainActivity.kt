@@ -12,10 +12,6 @@ import com.example.mangaocr_demon.HomeFragment
 import com.example.mangaocr_demon.HistoryFragment
 import com.example.mangaocr_demon.SettingsFragment
 
-
-
-
-
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
