@@ -28,10 +28,10 @@ class GoogleAuthManager(private val context: Context) {
             val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                 .requestEmail()
                 .requestProfile()
-                .requestIdToken(webClientId)  // ✅ Quan trọng cho Firebase Auth
+                .requestIdToken(webClientId)
                 .requestScopes(
-                    Scope(DriveScopes.DRIVE_FILE),      // Quyền đọc/ghi file
-                    Scope(DriveScopes.DRIVE_APPDATA)    // Quyền app data
+                    Scope(DriveScopes.DRIVE_FILE),
+                    Scope(DriveScopes.DRIVE_APPDATA)
                 )
                 .build()
 
@@ -85,8 +85,6 @@ class GoogleAuthManager(private val context: Context) {
      * Lấy Intent để sign in
      */
     fun getSignInIntent(): Intent {
-        // Đăng xuất trước để luôn hiển thị account picker
-        signInClient.signOut()
         return signInClient.signInIntent
     }
 

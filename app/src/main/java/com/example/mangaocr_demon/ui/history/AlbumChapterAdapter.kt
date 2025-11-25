@@ -1,4 +1,4 @@
-package com.example.mangaocr_demon.ui.bookcase
+package com.example.mangaocr_demon.ui.history
 
 import android.view.LayoutInflater
 import android.view.ViewGroup

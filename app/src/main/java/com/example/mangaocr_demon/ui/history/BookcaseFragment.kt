@@ -1,4 +1,4 @@
-package com.example.mangaocr_demon
+package com.example.mangaocr_demon.ui.history
 
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -7,13 +7,14 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
+import com.example.mangaocr_demon.R
 import com.example.mangaocr_demon.data.AppDatabase
 import com.example.mangaocr_demon.databinding.FragmentBookcaseBinding
-import com.example.mangaocr_demon.ui.bookcase.AlbumAdapter
+import com.example.mangaocr_demon.ui.history.AlbumAdapter
 import kotlinx.coroutines.launch
 import com.example.mangaocr_demon.data.AlbumEntity
-import com.example.mangaocr_demon.ui.bookcase.AlbumDetailFragment
-import com.example.mangaocr_demon.ui.bookcase.CreateAlbumDialogFragment
+import com.example.mangaocr_demon.ui.history.AlbumDetailFragment
+import com.example.mangaocr_demon.ui.history.CreateAlbumDialogFragment
 
 class BookcaseFragment : Fragment() {
 

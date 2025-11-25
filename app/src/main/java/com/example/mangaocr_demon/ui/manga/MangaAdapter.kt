@@ -1,20 +1,56 @@
 package com.example.mangaocr_demon.ui.manga
 
 import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.example.mangaocr_demon.R
 import com.example.mangaocr_demon.data.MangaEntity
+import com.example.mangaocr_demon.databinding.ItemMangaBinding
 
 class MangaAdapter(
-    private val onClick: (MangaEntity) -> Unit
-) : ListAdapter<MangaEntity, MangaAdapter.MangaViewHolder>(DiffCallback) {
+    private val onItemClick: (MangaEntity) -> Unit,
+    private val onDeleteClick: (MangaEntity) -> Unit // 1. THÊM THAM SỐ NÀY
+) : ListAdapter<MangaEntity, MangaAdapter.MangaViewHolder>(MangaDiffCallback()) {
 
-    companion object DiffCallback : DiffUtil.ItemCallback<MangaEntity>() {
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MangaViewHolder {
+        val binding = ItemMangaBinding.inflate(
+            LayoutInflater.from(parent.context),
+            parent,
+            false
+        )
+        return MangaViewHolder(binding)
+    }
+
+    override fun onBindViewHolder(holder: MangaViewHolder, position: Int) {
+        holder.bind(getItem(position))
+    }
+
+    inner class MangaViewHolder(
+        private val binding: ItemMangaBinding
+    ) : RecyclerView.ViewHolder(binding.root) {
+
+        fun bind(manga: MangaEntity) {
+            binding.apply {
+                // Bind data
+                tvMangaTitle.text = manga.title
+                tvMangaDesc.text = manga.description ?: "Chưa có mô tả"
+                tvChapterCount.text = "0 ch"
+                tvPageCount.text = "0 trang"
+
+                // 2. GÁN SỰ KIỆN CLICK CHO VÙNG NỘI DUNG CHÍNH
+                clickableArea.setOnClickListener {
+                    onItemClick(manga)
+                }
+
+                ivDeleteIcon.setOnClickListener {
+                    onDeleteClick(manga)
+                }
+            }
+        }
+    }
+
+    class MangaDiffCallback : DiffUtil.ItemCallback<MangaEntity>() {
         override fun areItemsTheSame(oldItem: MangaEntity, newItem: MangaEntity): Boolean {
             return oldItem.id == newItem.id
         }
@@ -22,34 +58,5 @@ class MangaAdapter(
         override fun areContentsTheSame(oldItem: MangaEntity, newItem: MangaEntity): Boolean {
             return oldItem == newItem
         }
-    }
-
-    class MangaViewHolder(itemView: View, val onClick: (MangaEntity) -> Unit) :
-        RecyclerView.ViewHolder(itemView) {
-        private val titleText: TextView = itemView.findViewById(R.id.tvMangaTitle)
-        private val descText: TextView = itemView.findViewById(R.id.tvMangaDesc)
-        private var currentManga: MangaEntity? = null
-
-        init {
-            itemView.setOnClickListener {
-                currentManga?.let { onClick(it) }
-            }
-        }
-
-        fun bind(manga: MangaEntity) {
-            currentManga = manga
-            titleText.text = manga.title
-            descText.text = manga.description
-        }
-    }
-
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MangaViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_manga, parent, false)
-        return MangaViewHolder(view, onClick)
-    }
-
-    override fun onBindViewHolder(holder: MangaViewHolder, position: Int) {
-        holder.bind(getItem(position))
     }
 }

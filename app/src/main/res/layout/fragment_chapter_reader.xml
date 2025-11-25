@@ -71,7 +71,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
-        android:src="@drawable/ic_image_placeholder"
+        android:src="@drawable/ic_ocr"
         app:tint="@android:color/white"
         app:fabSize="normal"
         app:layout_constraintEnd_toEndOf="parent"
@@ -98,7 +98,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginBottom="12dp"
-            android:src="@drawable/ic_image_placeholder"
+            android:src="@drawable/ic_scan"
             app:tint="@android:color/white"
             app:fabSize="mini"
             android:contentDescription="Scan current page" />
@@ -109,20 +109,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginBottom="12dp"
-            android:src="@drawable/ic_image_placeholder"
+            android:src="@drawable/ic_gemini"
             app:tint="@android:color/white"
             app:fabSize="mini"
             android:contentDescription="Toggle text overlay" />
-
-        <!-- Debug mode toggle -->
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
-            android:id="@+id/fabDebugMode"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:src="@drawable/ic_image_placeholder"
-            app:tint="@android:color/white"
-            app:fabSize="mini"
-            android:contentDescription="Debug mode" />
 
     </LinearLayout>
 

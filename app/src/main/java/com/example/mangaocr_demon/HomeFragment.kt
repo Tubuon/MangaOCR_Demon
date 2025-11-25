@@ -14,6 +14,7 @@ import com.example.mangaocr_demon.data.MangaEntity
 import com.example.mangaocr_demon.databinding.FragmentHomeBinding
 import com.example.mangaocr_demon.ui.manga.MangaAdapter
 import com.example.mangaocr_demon.ui.viewmodel.HomeViewModel
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -42,7 +43,6 @@ class HomeFragment : Fragment() {
 
     // =================== LAUNCHERS ===================
 
-    // PDF Picker Launcher
     private val pdfPickerLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -66,7 +66,7 @@ class HomeFragment : Fragment() {
                 try {
                     if (!isAdded || _binding == null) return@launch
 
-                    showProgressBar(true, "Đang xử lý PDF...")
+                    showProgressBar(true, "Đang sao chép PDF...")
 
                     withContext(Dispatchers.IO) {
                         try {
@@ -109,7 +109,6 @@ class HomeFragment : Fragment() {
         }
     }
 
-    // Image Picker Launcher
     private val imagePickerLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -133,14 +132,13 @@ class HomeFragment : Fragment() {
                 try {
                     if (!isAdded || _binding == null) return@launch
 
-                    showProgressBar(true, "Đang xử lý ảnh...")
+                    showProgressBar(true, "Đang sao chép ảnh...")
 
                     val uris = mutableListOf<String>()
 
                     withContext(Dispatchers.IO) {
                         val clipData = intent.clipData
                         if (clipData != null) {
-                            // Multiple images
                             for (i in 0 until clipData.itemCount) {
                                 val uri = clipData.getItemAt(i).uri
                                 try {
@@ -154,7 +152,6 @@ class HomeFragment : Fragment() {
                                 }
                             }
                         } else {
-                            // Single image
                             intent.data?.let { uri ->
                                 try {
                                     requireContext().contentResolver.takePersistableUriPermission(
@@ -267,26 +264,31 @@ class HomeFragment : Fragment() {
     // =================== UI SETUP ===================
 
     private fun setupRecyclerView() {
-        adapter = MangaAdapter { manga ->
-            if (!isAdded) return@MangaAdapter
+        adapter = MangaAdapter(
+            onItemClick = { manga ->
+                if (!isAdded) return@MangaAdapter
 
-            val bundle = Bundle().apply {
-                putLong("mangaId", manga.id)
-                putString("mangaTitle", manga.title)
-            }
-            val fragment = MangaDetailFragment().apply {
-                arguments = bundle
-            }
+                val bundle = Bundle().apply {
+                    putLong("mangaId", manga.id)
+                    putString("mangaTitle", manga.title)
+                }
+                val fragment = MangaDetailFragment().apply {
+                    arguments = bundle
+                }
 
-            try {
-                parentFragmentManager.beginTransaction()
-                    .replace(android.R.id.content, fragment)
-                    .addToBackStack(null)
-                    .commit()
-            } catch (e: Exception) {
-                android.util.Log.e(TAG, "Error navigating to detail", e)
+                try {
+                    parentFragmentManager.beginTransaction()
+                        .replace(android.R.id.content, fragment)
+                        .addToBackStack(null)
+                        .commit()
+                } catch (e: Exception) {
+                    android.util.Log.e(TAG, "Error navigating to detail", e)
+                }
+            },
+            onDeleteClick = { manga ->
+                showDeleteConfirmDialog(manga)
             }
-        }
+        )
 
         binding.recyclerViewManga.apply {
             layoutManager = LinearLayoutManager(requireContext())
@@ -295,7 +297,6 @@ class HomeFragment : Fragment() {
     }
 
     private fun setupFabMenu() {
-        // Main FAB click
         binding.fabAdd.setOnClickListener {
             if (isFabMenuOpen) {
                 closeFabMenu()
@@ -304,18 +305,15 @@ class HomeFragment : Fragment() {
             }
         }
 
-        // Scrim overlay click
         binding.scrimOverlay.setOnClickListener {
             closeFabMenu()
         }
 
-        // PDF button click
         binding.btnAddPdf.setOnClickListener {
             closeFabMenu()
             openPdfPicker()
         }
 
-        // Images button click
         binding.btnAddImages.setOnClickListener {
             closeFabMenu()
             showImagePickerInfo()
@@ -329,6 +327,48 @@ class HomeFragment : Fragment() {
             adapter.submitList(list)
             updateEmptyState(list.isEmpty())
             binding.tvMangaCount.text = "${list.size} truyện"
+        }
+    }
+
+    // =================== DELETE ===================
+
+    private fun showDeleteConfirmDialog(manga: MangaEntity) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Xóa truyện?")
+            .setMessage("Bạn có chắc muốn xóa \"${manga.title}\"?\n\nToàn bộ chapters, pages và files ảnh/PDF sẽ bị xóa vĩnh viễn.")
+            .setPositiveButton("Xóa") { _, _ ->
+                deleteManga(manga)
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
+    }
+
+    private fun deleteManga(manga: MangaEntity) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                showProgressBar(true, "Đang xóa...")
+
+                withContext(Dispatchers.IO) {
+                    // Xóa files trước
+                    viewModel.deleteMangaFiles(manga.id)
+
+                    // Xóa manga (cascade sẽ xóa chapters và pages)
+                    val db = com.example.mangaocr_demon.data.AppDatabase.getDatabase(requireContext())
+                    db.mangaDao().delete(manga)
+                }
+
+                if (isAdded && context != null) {
+                    showProgressBar(false)
+                    showToast("✅ Đã xóa \"${manga.title}\"")
+                }
+
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "Error deleting manga", e)
+                if (isAdded && context != null) {
+                    showProgressBar(false)
+                    showToast("❌ Lỗi xóa: ${e.message}")
+                }
+            }
         }
     }
 
