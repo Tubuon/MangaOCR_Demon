@@ -272,12 +272,6 @@ class ChapterReaderFragment : Fragment() {
             toggleFabMenu()
             true
         }
-
-        // Debug mode toggle
-        binding.fabDebugMode.setOnClickListener {
-            toggleDebugMode()
-            toggleFabMenu()
-        }
     }
 
     private fun translateCurrentPage() {
@@ -392,8 +386,6 @@ class ChapterReaderFragment : Fragment() {
             showError("No image found")
             return
         }
-
-
         android.util.Log.d("ChapterReaderFragment", "🔄 Processing OCR for page ${page.id}")
         ocrViewModel.processPage(page)
     }
